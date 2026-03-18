@@ -70,17 +70,16 @@ async def _fetch_via_proxy(
             timeout=timeout
         )
         
-        # 验证内容有效性
-        if "js_content" in html and len(html) > 500000:
-            logger.info("[Proxy] ✅ len=%d", len(html))
+        # 验证内容有效性: 只检查 js_content 是否存在
+        if "js_content" in html:
+            logger.info("[Proxy] len=%d", len(html))
             return html
         else:
-            logger.warning("[Proxy] ❌ 内容无效 (len=%d, has_js_content=%s)", 
-                           len(html), "js_content" in html)
+            logger.warning("[Proxy] invalid content (len=%d, has_js_content=False)", len(html))
             return None
         
     except Exception as e:
-        logger.error("[Proxy] ❌ %s", str(e)[:100])
+        logger.error("[Proxy] %s", str(e)[:100])
         return None
 
 

@@ -61,35 +61,53 @@ def process_article_content(html: str, proxy_base_url: str = None) -> Dict:
     }
 
 
+def _extract_div_inner(html: str, open_tag_pattern: str) -> str:
+    """
+    Extract the inner HTML of a <div> matched by open_tag_pattern,
+    correctly handling nested <div> tags by counting open/close depth.
+    """
+    m = re.search(open_tag_pattern, html, re.DOTALL | re.IGNORECASE)
+    if not m:
+        return ""
+
+    start = m.end()
+    depth = 1
+    pos = start
+    open_re = re.compile(r'<div[\s>/]', re.IGNORECASE)
+    close_re = re.compile(r'</div\s*>', re.IGNORECASE)
+
+    while depth > 0 and pos < len(html):
+        next_open = open_re.search(html, pos)
+        next_close = close_re.search(html, pos)
+
+        if next_close is None:
+            break
+
+        if next_open and next_open.start() < next_close.start():
+            depth += 1
+            pos = next_open.end()
+        else:
+            depth -= 1
+            if depth == 0:
+                return html[start:next_close.start()].strip()
+            pos = next_close.end()
+
+    return html[start:].strip()
+
+
 def extract_content(html: str) -> str:
     """
-    提取文章正文（保持原始 HTML 结构）
-    
-    微信文章的正文在 id="js_content" 的 div 中，
-    这个 div 内的 HTML 已经按正确顺序排列了文本和图片。
+    Extract article body from the js_content div, handling nested divs.
     """
-    
-    # 方法 1: 匹配 id="js_content" (改进版，更灵活)
-    match = re.search(
-        r'<div[^>]*\bid=["\']js_content["\'][^>]*>(.*?)</div>',
-        html,
-        re.DOTALL | re.IGNORECASE
-    )
-    
-    if match:
-        return match.group(1).strip()
-    
-    # 方法 2: 匹配 class="rich_media_content"  
-    match = re.search(
-        r'<div[^>]*\bclass=["\'][^"\']*rich_media_content[^"\']*["\'][^>]*>(.*?)</div>',
-        html,
-        re.DOTALL | re.IGNORECASE
-    )
-    
-    if match:
-        return match.group(1).strip()
-    
-    logger.warning("未能提取文章正文")
+    content = _extract_div_inner(html, r'<div[^>]*\bid=["\']js_content["\'][^>]*>')
+    if content:
+        return content
+
+    content = _extract_div_inner(html, r'<div[^>]*\bclass=["\'][^"\']*rich_media_content[^"\']*["\'][^>]*>')
+    if content:
+        return content
+
+    logger.warning("Failed to extract article body")
     return ""
 
 
