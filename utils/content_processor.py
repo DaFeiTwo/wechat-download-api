@@ -97,17 +97,43 @@ def _extract_div_inner(html: str, open_tag_pattern: str) -> str:
 
 def extract_content(html: str) -> str:
     """
-    Extract article body from the js_content div, handling nested divs.
+    Extract article body, trying multiple container patterns.
+    Different WeChat account types (government, media, personal) use
+    different HTML structures. We try them in order of specificity.
+    For image-text messages (item_show_type=8), delegates to helpers.
     """
+    from utils.helpers import is_image_text_message, _extract_image_text_content
+
+    if is_image_text_message(html):
+        result = _extract_image_text_content(html)
+        return result.get('content', '')
+
+    # Pattern 1: id="js_content" (most common)
     content = _extract_div_inner(html, r'<div[^>]*\bid=["\']js_content["\'][^>]*>')
     if content:
         return content
 
+    # Pattern 2: class contains rich_media_content
     content = _extract_div_inner(html, r'<div[^>]*\bclass=["\'][^"\']*rich_media_content[^"\']*["\'][^>]*>')
     if content:
         return content
 
-    logger.warning("Failed to extract article body")
+    # Pattern 3: id="page-content" (government/institutional accounts)
+    content = _extract_div_inner(html, r'<div[^>]*\bid=["\']page-content["\'][^>]*>')
+    if content:
+        return content
+
+    # Pattern 4: class contains rich_media_area_primary_inner
+    content = _extract_div_inner(html, r'<div[^>]*\bclass=["\'][^"\']*rich_media_area_primary_inner[^"\']*["\'][^>]*>')
+    if content:
+        return content
+
+    # Pattern 5: id="js_article" (alternative article container)
+    content = _extract_div_inner(html, r'<div[^>]*\bid=["\']js_article["\'][^>]*>')
+    if content:
+        return content
+
+    logger.warning("Failed to extract article body from any known container")
     return ""
 
 

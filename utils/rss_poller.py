@@ -20,7 +20,7 @@ import httpx
 
 from utils.auth_manager import auth_manager
 from utils import rss_store
-from utils.helpers import extract_article_info, parse_article_url
+from utils.helpers import extract_article_info, parse_article_url, is_image_text_message, has_article_content
 from utils.http_client import fetch_page
 
 logger = logging.getLogger(__name__)
@@ -225,8 +225,8 @@ class RSSPoller:
                 continue
             
             html = results.get(link)
-            if not html or "js_content" not in html:
-                logger.warning("❌ No content in HTML: %s", link[:80])
+            if not html or not has_article_content(html):
+                logger.warning("No content in HTML: %s", link[:80])
                 enriched.append(article)
                 continue
             
@@ -246,7 +246,7 @@ class RSSPoller:
                     article_info = extract_article_info(html, parse_article_url(link))
                     article["author"] = article_info.get("author", "")
                 
-                logger.info("✅ Content fetched: %s... (%d chars, %d images)", 
+                logger.info("Content fetched: %s... (%d chars, %d images)",
                            link[:50],
                            len(article["content"]), 
                            len(result.get("images", [])))

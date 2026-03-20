@@ -133,17 +133,29 @@ def update_last_poll(fakeid: str):
 # ── 文章缓存 ─────────────────────────────────────────────
 
 def save_articles(fakeid: str, articles: List[Dict]) -> int:
-    """批量保存文章，返回新增数量"""
+    """
+    批量保存文章，返回新增数量。
+    If an article already exists but has empty content, update it with new content.
+    """
     conn = _get_conn()
     inserted = 0
     try:
         for a in articles:
+            content = a.get("content", "")
+            plain_content = a.get("plain_content", "")
             try:
-                conn.execute(
-                    "INSERT OR IGNORE INTO articles "
+                cursor = conn.execute(
+                    "INSERT INTO articles "
                     "(fakeid, aid, title, link, digest, cover, author, "
                     "content, plain_content, publish_time, fetched_at) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
+                    "ON CONFLICT(fakeid, link) DO UPDATE SET "
+                    "content = CASE WHEN excluded.content != '' AND articles.content = '' "
+                    "  THEN excluded.content ELSE articles.content END, "
+                    "plain_content = CASE WHEN excluded.plain_content != '' AND articles.plain_content = '' "
+                    "  THEN excluded.plain_content ELSE articles.plain_content END, "
+                    "author = CASE WHEN excluded.author != '' AND articles.author = '' "
+                    "  THEN excluded.author ELSE articles.author END",
                     (
                         fakeid,
                         a.get("aid", ""),
@@ -152,13 +164,13 @@ def save_articles(fakeid: str, articles: List[Dict]) -> int:
                         a.get("digest", ""),
                         a.get("cover", ""),
                         a.get("author", ""),
-                        a.get("content", ""),
-                        a.get("plain_content", ""),
+                        content,
+                        plain_content,
                         a.get("publish_time", 0),
                         int(time.time()),
                     ),
                 )
-                if conn.total_changes:
+                if cursor.rowcount > 0:
                     inserted += 1
             except sqlite3.IntegrityError:
                 pass

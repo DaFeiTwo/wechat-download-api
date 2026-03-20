@@ -8,15 +8,20 @@
 文章路由 - FastAPI版本
 """
 
+import logging
+import re
+from typing import Optional, List
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
-from typing import Optional, List
-import re
+
 from utils.auth_manager import auth_manager
-from utils.helpers import extract_article_info, parse_article_url
+from utils.helpers import extract_article_info, parse_article_url, is_image_text_message, has_article_content, get_client_ip
 from utils.rate_limiter import rate_limiter
 from utils.webhook import webhook
 from utils.http_client import fetch_page
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -56,23 +61,25 @@ async def get_article(article_request: ArticleRequest, request: Request):
     - `publish_time`: 发布时间戳
     - `images`: 文章内的图片列表
     """
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     allowed, error_msg = rate_limiter.check_rate_limit(client_ip, "/api/article")
     if not allowed:
-        return {"success": False, "error": f"⏱️ {error_msg}"}
+        return {"success": False, "error": f"Rate limited: {error_msg}"}
 
     credentials = auth_manager.get_credentials()
     if not credentials:
         return {"success": False, "error": "服务器未登录，请先访问管理页面扫码登录"}
 
     try:
+        logger.info("[Article] request from %s: %s", client_ip, article_request.url[:80])
+
         html = await fetch_page(
             article_request.url,
             extra_headers={"Referer": "https://mp.weixin.qq.com/"},
-            timeout=120  # WeChat 大文章可能超时，延长至 120 秒
+            timeout=120
         )
 
-        if "js_content" not in html:
+        if not has_article_content(html):
             if "verify" in html or "验证" in html or "环境异常" in html:
                 await webhook.notify('verification_required', {
                     'url': article_request.url,

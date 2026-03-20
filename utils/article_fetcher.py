@@ -70,12 +70,12 @@ async def _fetch_via_proxy(
             timeout=timeout
         )
         
-        # 验证内容有效性: 只检查 js_content 是否存在
-        if "js_content" in html:
+        from utils.helpers import has_article_content
+        if has_article_content(html):
             logger.info("[Proxy] len=%d", len(html))
             return html
         else:
-            logger.warning("[Proxy] invalid content (len=%d, has_js_content=False)", len(html))
+            logger.warning("[Proxy] invalid content (len=%d, no known content marker)", len(html))
             return None
         
     except Exception as e:
