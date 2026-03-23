@@ -9,9 +9,9 @@
 
 services:
   wechat-api:
-    build: .
-    # Or use pre-built image (after published):
-    # image: tmwgsicp/wechat-download-api:latest
+    image: tmwgsicp/wechat-download-api:latest
+    # Or build locally:
+    # build: .
     container_name: wechat-download-api
     restart: unless-stopped
     ports:

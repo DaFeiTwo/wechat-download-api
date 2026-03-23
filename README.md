@@ -8,6 +8,7 @@
 
 [![GitHub stars](https://img.shields.io/github/stars/tmwgsicp/wechat-download-api?style=for-the-badge&logo=github)](https://github.com/tmwgsicp/wechat-download-api/stargazers)
 [![License](https://img.shields.io/badge/License-AGPL%203.0-blue?style=for-the-badge)](LICENSE)
+[![Docker Pulls](https://img.shields.io/docker/pulls/tmwgsicp/wechat-download-api?style=for-the-badge&logo=docker&logoColor=white)](https://hub.docker.com/r/tmwgsicp/wechat-download-api)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 
@@ -36,6 +37,33 @@
   <img src="assets/rss.jpg" width="800" alt="RSS 订阅管理">
   <p><em>RSS 订阅管理 — 搜索公众号一键订阅，复制地址接入 RSS 阅读器</em></p>
 </div>
+
+---
+
+## Docker 部署 🐳
+
+**最快速的部署方式**，无需配置 Python 环境，一键启动：
+
+```bash
+# 方式一：使用 docker-compose（推荐）
+git clone https://github.com/tmwgsicp/wechat-download-api.git
+cd wechat-download-api
+cp env.example .env
+# 编辑 .env 设置 SITE_URL 为实际访问地址
+docker-compose up -d
+
+# 方式二：直接运行
+docker run -d \
+  -p 5000:5000 \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/.env:/app/.env \
+  --name wechat-api \
+  tmwgsicp/wechat-download-api:latest
+```
+
+服务启动后访问 `http://localhost:5000/login.html` 扫码登录即可使用。
+
+**支持多架构**：`linux/amd64` / `linux/arm64`（Apple Silicon、树莓派、ARM 服务器）
 
 ---
 
@@ -70,6 +98,26 @@
 ---
 
 ## 快速开始
+
+### 方式一：Docker 部署（推荐）
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/tmwgsicp/wechat-download-api.git
+cd wechat-download-api
+
+# 2. 配置环境变量
+cp env.example .env
+# 编辑 .env，设置 SITE_URL 为实际访问地址（如 http://your-domain.com）
+
+# 3. 启动服务
+docker-compose up -d
+
+# 4. 查看日志
+docker-compose logs -f
+```
+
+### 方式二：一键脚本部署
 
 **第一步：克隆项目**
 
