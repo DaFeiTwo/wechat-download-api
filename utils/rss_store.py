@@ -12,12 +12,15 @@ RSS 数据存储 — SQLite
 import sqlite3
 import time
 import logging
+import os
 from pathlib import Path
 from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path(__file__).parent.parent / "data" / "rss.db"
+# Database path: configurable via env var, defaults to ./data/rss.db
+_default_db = Path(__file__).parent.parent / "data" / "rss.db"
+DB_PATH = Path(os.getenv("RSS_DB_PATH", str(_default_db)))
 
 
 def _get_conn() -> sqlite3.Connection:
