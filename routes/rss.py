@@ -11,6 +11,7 @@ RSS 订阅路由
 
 import csv
 import io
+import os
 import time
 import logging
 from datetime import datetime, timezone
@@ -27,6 +28,23 @@ from utils.rss_poller import rss_poller, POLL_INTERVAL
 from utils.image_proxy import proxy_image_url
 
 logger = logging.getLogger(__name__)
+
+
+def get_base_url(request: Request) -> str:
+    """
+    获取服务的基础 URL，优先使用环境变量 SITE_URL，
+    支持反向代理（检测 X-Forwarded-Proto 和 X-Forwarded-Host）
+    """
+    # 优先使用配置的 SITE_URL
+    site_url = os.getenv("SITE_URL", "").strip()
+    if site_url:
+        return site_url.rstrip("/")
+    
+    # 检测反向代理头部
+    proto = request.headers.get("X-Forwarded-Proto", "http")
+    host = request.headers.get("X-Forwarded-Host") or request.headers.get("Host", "localhost:5000")
+    
+    return f"{proto}://{host}"
 
 router = APIRouter()
 
@@ -118,7 +136,7 @@ async def get_subscriptions(request: Request):
     返回每个订阅的基本信息、缓存文章数和 RSS 地址。
     """
     subs = rss_store.list_subscriptions()
-    base_url = str(request.base_url).rstrip("/")
+    base_url = get_base_url(request)
 
     items = []
     for s in subs:
@@ -195,7 +213,7 @@ async def get_aggregated_rss_feed(
 
     articles = rss_store.get_all_articles(limit=limit) if subs else []
 
-    base_url = str(request.base_url).rstrip("/")
+    base_url = get_base_url(request)
     xml = _build_aggregated_rss_xml(articles, nickname_map, base_url)
     return Response(
         content=xml,
@@ -218,7 +236,7 @@ async def export_subscriptions(
     - **opml**: 标准 OPML 格式，可直接导入 RSS 阅读器
     """
     subs = rss_store.list_subscriptions()
-    base_url = str(request.base_url).rstrip("/")
+    base_url = get_base_url(request)
 
     if format == "opml":
         return _build_opml_response(subs, base_url)
@@ -448,7 +466,7 @@ async def get_rss_feed(fakeid: str, request: Request,
         raise HTTPException(status_code=404, detail="未找到该订阅，请先添加订阅")
 
     articles = rss_store.get_articles(fakeid, limit=limit)
-    base_url = str(request.base_url).rstrip("/")
+    base_url = get_base_url(request)
     xml = _build_rss_xml(fakeid, sub, articles, base_url)
 
     return Response(
