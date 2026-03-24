@@ -82,11 +82,26 @@ def is_audio_message(html: str) -> bool:
     """
     Detect audio articles (voice messages embedded via mpvoice / mp-common-mpaudio).
     检测是否为音频文章（包含 mpvoice 标签或音频播放器组件）。
+    
+    Important: Must check for ACTUAL audio tags, not just JS code that mentions audio.
     """
-    return ('voice_encode_fileid' in html or
-            '<mpvoice' in html or
-            'mp-common-mpaudio' in html or
-            'js_editor_audio' in html)
+    # 方法1: 检查是否有真实的 <mpvoice> 标签（注意：mpvoice 是自定义标签）
+    if '<mpvoice' in html:
+        return True
+    
+    # 方法2: 检查是否有音频播放器组件的 **HTML标签**（不是JS代码）
+    # 使用更严格的正则，确保匹配的是标签而不是JS变量
+    import re
+    
+    # 匹配实际的音频标签：<mp-common-mpaudio ...>
+    if re.search(r'<mp-common-mpaudio[^>]*>', html, re.IGNORECASE):
+        return True
+    
+    # 匹配实际的音频容器：<div id="js_editor_audio_...">
+    if re.search(r'<div[^>]+id=["\']js_editor_audio[^"\']*["\']', html, re.IGNORECASE):
+        return True
+    
+    return False
 
 
 def _extract_image_text_content(html: str) -> Dict:
@@ -372,6 +387,88 @@ def _extract_audio_content(html: str) -> Dict:
     }
 
 
+def _extract_audio_share_content(html: str) -> Dict:
+    """
+    Extract content from item_show_type=7 audio/video share pages.
+    
+    These pages use dynamic Vue applications (common_share_audio module),
+    so most content is loaded via JavaScript. We can only extract basic
+    metadata from the static HTML.
+    
+    Example: Podcast episodes, audio shows (e.g., 马刺进步报告)
+    """
+    import html as html_module
+    
+    # 提取标题
+    title = ''
+    title_match = (
+        re.search(r'<meta\s+property="og:title"\s+content="([^"]+)"', html) or
+        re.search(r"window\.msg_title\s*=\s*window\.title\s*=\s*'([^']*)'", html)
+    )
+    if title_match:
+        title = html_module.unescape(title_match.group(1))
+    
+    # 提取作者
+    author = ''
+    author_match = (
+        re.search(r'<meta\s+property="og:article:author"\s+content="([^"]+)"', html) or
+        re.search(r'var\s+nickname\s*=\s*"([^"]+)"', html)
+    )
+    if author_match:
+        author = html_module.unescape(author_match.group(1))
+    
+    # 提取封面图(如果有)
+    images = []
+    og_image_match = re.search(r'<meta\s+property="og:image"\s+content="([^"]+)"', html)
+    if og_image_match:
+        img_url = og_image_match.group(1)
+        if img_url and ('mmbiz' in img_url or img_url.startswith('http')):
+            images.append(img_url)
+    
+    # 生成内容
+    content_parts = []
+    
+    # 封面图
+    if images:
+        for img_url in images:
+            content_parts.append(
+                f'<div style="text-align:center;margin:16px 0">'
+                f'<img src="{img_url}" data-src="{img_url}" '
+                f'style="max-width:100%;height:auto;border-radius:8px" />'
+                f'</div>'
+            )
+    
+    # 音频占位符（使用中英双语，适配RSS阅读器）
+    content_parts.append(
+        '<div style="background:#f6f6f6;padding:20px;border-radius:8px;'
+        'text-align:center;margin:20px 0;border:2px dashed #d9d9d9">'
+        '<p style="margin:0;font-size:18px;color:#333">🎵 音频内容 / Audio Content</p>'
+        '<p style="margin:12px 0;font-size:14px;color:#666;line-height:1.6">'
+        '这是微信音频分享文章，内容通过JavaScript动态加载，无法直接提取。<br>'
+        'This is a WeChat audio share article. Content is loaded dynamically via JavaScript.</p>'
+        '<p style="margin:8px 0;font-size:13px;color:#999">'
+        '请在微信中查看完整内容 / Please view in WeChat app</p>'
+        '</div>'
+    )
+    
+    content = '\n'.join(content_parts)
+    
+    # 纯文本
+    plain_content = f"[音频分享文章 / Audio Share Article]\n\n"
+    if title:
+        plain_content += f"标题 / Title: {title}\n"
+    if author:
+        plain_content += f"作者 / Author: {author}\n"
+    plain_content += "\n(此音频内容无法直接提取，请在微信中查看)"
+    plain_content += "\n(Audio content cannot be extracted directly, please view in WeChat)"
+    
+    return {
+        'content': content,
+        'plain_content': plain_content,
+        'images': images,
+    }
+
+
 def extract_article_info(html: str, params: Optional[Dict] = None) -> Dict:
     """
     从HTML中提取文章信息
@@ -427,18 +524,29 @@ def extract_article_info(html: str, params: Optional[Dict] = None) -> Dict:
         except (ValueError, TypeError):
             pass
 
-    # 检测特殊内容类型
-    if is_image_text_message(html):
+    # 优先处理特殊类型（按 item_show_type 判断）
+    item_type = get_item_show_type(html)
+    
+    if item_type == '7':
+        # item_show_type=7: 音频/视频分享页面（动态Vue应用）
+        audio_share_data = _extract_audio_share_content(html)
+        content = audio_share_data['content']
+        images = audio_share_data['images']
+        plain_content = audio_share_data['plain_content']
+    elif item_type == '8' or is_image_text_message(html):
+        # item_show_type=8: 图文消息
         img_text_data = _extract_image_text_content(html)
         content = img_text_data['content']
         images = img_text_data['images']
         plain_content = img_text_data['plain_content']
-    elif is_short_content_message(html):
+    elif item_type == '10' or is_short_content_message(html):
+        # item_show_type=10: 短内容/转发消息
         short_data = _extract_short_content(html)
         content = short_data['content']
         images = short_data['images']
         plain_content = short_data['plain_content']
     elif is_audio_message(html):
+        # 音频文章（mpvoice / mp-common-mpaudio）
         audio_data = _extract_audio_content(html)
         content = audio_data['content']
         images = audio_data['images']
@@ -520,6 +628,12 @@ def has_article_content(html: str) -> bool:
         return True
     if is_image_text_message(html) or is_short_content_message(html) or is_audio_message(html):
         return True
+    
+    # item_show_type=7: Audio/video share pages (dynamic Vue app)
+    # These pages have no traditional content container, but are valid articles
+    if get_item_show_type(html) == '7':
+        return True
+    
     return False
 
 
@@ -554,14 +668,26 @@ def get_unavailable_reason(html: str) -> Optional[str]:
     """
     Return human-readable reason if article is permanently unavailable, else None.
     返回文章不可用的原因，如果文章正常则返回 None。
+    
+    Important: Must distinguish between:
+    1. Verification pages (environment error) - NOT unavailable, should retry
+    2. "暂时无法查看" standalone page - IS unavailable (HTML < 1KB, minimal structure)
+    3. Privacy/payment pages (empty Vue app) - IS unavailable
+    4. Truly unavailable articles (deleted/censored) - permanently unavailable
     """
+    # 优先排除：微信验证页面（这不是文章不可用，而是IP风控）
+    # 特征：包含"环境异常"+"完成验证"+"去验证"，且HTML较大（>1.5MB）
+    verification_markers = ["环境异常", "完成验证后即可继续访问", "去验证"]
+    if all(marker in html for marker in verification_markers):
+        return None
+    
+    # 真正的不可用标记（静态HTML中的明确文字）
     markers = [
         ("该内容已被发布者删除", "已被发布者删除"),
         ("内容已删除", "已被发布者删除"),
         ("此内容因违规无法查看", "因违规无法查看"),
         ("涉嫌违反相关法律法规和政策", "涉嫌违规被限制"),
         ("此内容发送失败无法查看", "发送失败无法查看"),
-        ("该内容暂时无法查看", "暂时无法查看"),
         ("根据作者隐私设置，无法查看该内容", "作者隐私设置不可见"),
         ("接相关投诉，此内容违反", "因投诉违规被限制"),
         ("该文章已被第三方辟谣", "已被第三方辟谣"),
@@ -569,6 +695,33 @@ def get_unavailable_reason(html: str) -> Optional[str]:
     for keyword, reason in markers:
         if keyword in html:
             return reason
+    
+    # 特殊处理："该内容暂时无法查看"独立页面
+    # 特征：HTML很小（<2KB）+ <title>标签包含此文字 = 独立错误页面
+    # 必须同时满足两个条件，避免误判正常文章中包含这句话的情况
+    if "该内容暂时无法查看" in html and len(html) < 2000:
+        import re
+        title_match = re.search(r'<title>(.*?)</title>', html, re.IGNORECASE)
+        if title_match and "该内容暂时无法查看" in title_match.group(1):
+            return "暂时无法查看"
+    
+    # 特殊处理：空Vue应用（隐私设置的动态错误页面）
+    # 特征：<div id="app"></div> 是空的 + 无文章内容容器 + HTML不超大（<200KB）
+    # 这种页面的错误提示通过JS动态加载，静态HTML中看不到
+    # 实际显示："根据作者隐私设置，无法查看该内容"
+    if '<div id="app">' in html and len(html) < 200000:
+        import re
+        # 检查是否有实际的文章内容容器
+        has_content_container = (
+            'id="js_content"' in html or
+            'class="rich_media_content' in html or
+            'class="rich_media_area_primary_inner' in html
+        )
+        # 如果没有内容容器，且title为空，是隐私限制页面
+        title_match = re.search(r'<title>(.*?)</title>', html, re.IGNORECASE)
+        if not has_content_container and title_match and not title_match.group(1).strip():
+            return "根据作者隐私设置不可查看"
+    
     return None
 
 

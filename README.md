@@ -502,6 +502,21 @@ PROXY_URLS=socks5://myuser:mypass@vps1-ip:1080,socks5://myuser:mypass@vps2-ip:10
 
 ---
 
+## 内容类型与获取策略
+
+本项目支持多种微信公众号内容类型，包括标准富文本、纯图片文章、图文消息、短内容、音频文章等。
+
+详细说明请查看：**[CONTENT_TYPES.md](CONTENT_TYPES.md)**
+
+**文档内容**：
+- 所有支持的内容类型及 `item_show_type` 值
+- 不可用状态识别（删除、违规、隐私、验证页面等）
+- 反爬策略与代理配置
+- 关键函数说明
+- 开发贡献指南
+
+---
+
 ## 常见问题
 
 <details>

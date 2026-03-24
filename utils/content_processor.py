@@ -53,6 +53,11 @@ def process_article_content(html: str, proxy_base_url: str = None) -> Dict:
     # 5. 生成纯文本
     plain_content = html_to_text(content)
     
+    # 6. 纯图片文章处理：如果没有文字但有图片，生成图片描述
+    if not plain_content.strip() and images:
+        plain_content = f"[纯图片文章，共 {len(images)} 张图片]"
+        logger.info(f"检测到纯图片文章: {len(images)} 张图片，无文字内容")
+    
     return {
         'content': content,
         'plain_content': plain_content,
