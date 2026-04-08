@@ -56,6 +56,9 @@ class WebhookNotifier:
     def _is_wecom(self, url: str) -> bool:
         return "qyapi.weixin.qq.com" in url
 
+    def _is_feishu(self, url: str) -> bool:
+        return "open.feishu.cn" in url or "open.larksuite.com" in url
+
     def _build_payload(self, url: str, event: str, data: Dict) -> dict:
         """根据 webhook 类型构造消息体"""
         label = EVENT_LABELS.get(event, event)
@@ -70,6 +73,12 @@ class WebhookNotifier:
             return {
                 "msgtype": "markdown",
                 "markdown": {"content": "\n".join(lines)},
+            }
+
+        if self._is_feishu(url):
+            return {
+                "msg_type": "text",
+                "content": {"text": "\n".join(lines).replace("**", "").replace("> ", "")},
             }
 
         return {
