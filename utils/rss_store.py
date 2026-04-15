@@ -222,3 +222,15 @@ def get_all_articles(limit: int = 50) -> List[Dict]:
         conn.close()
 
 
+def get_article_by_id(article_id: int) -> Optional[Dict]:
+    """Get a single article by its ID."""
+    conn = _get_conn()
+    try:
+        row = conn.execute(
+            "SELECT * FROM articles WHERE id=?", (article_id,)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+

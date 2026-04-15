@@ -175,6 +175,7 @@ async def get_articles_json(
         head_img = proxy_image_url(sub_info.get("head_img", ""), base_url)
         cover = proxy_image_url(a.get("cover", ""), base_url)
         items.append({
+            "id": a.get("id", 0),
             "title": a.get("title", ""),
             "link": a.get("link", ""),
             "digest": a.get("digest", ""),
@@ -187,6 +188,43 @@ async def get_articles_json(
         })
 
     return {"success": True, "data": items, "total": len(items)}
+
+
+@router.get("/rss/article/{article_id}", summary="获取单篇文章详情 (JSON)")
+async def get_article_detail(article_id: int, request: Request):
+    """
+    获取单篇文章的完整内容，用于站内阅读页渲染。
+    """
+    article = rss_store.get_article_by_id(article_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="文章不存在")
+
+    base_url = get_base_url(request)
+    sub = rss_store.get_subscription(article.get("fakeid", ""))
+    head_img = ""
+    nickname = ""
+    if sub:
+        head_img = proxy_image_url(sub.get("head_img", ""), base_url)
+        nickname = sub.get("nickname", "")
+
+    cover = proxy_image_url(article.get("cover", ""), base_url)
+
+    return {
+        "success": True,
+        "data": {
+            "id": article.get("id", 0),
+            "title": article.get("title", ""),
+            "author": article.get("author", ""),
+            "content": article.get("content", ""),
+            "digest": article.get("digest", ""),
+            "cover": cover,
+            "link": article.get("link", ""),
+            "publish_time": article.get("publish_time", 0),
+            "nickname": nickname,
+            "head_img": head_img,
+            "fakeid": article.get("fakeid", ""),
+        },
+    }
 
 
 @router.post("/rss/poll", response_model=PollerStatusResponse,

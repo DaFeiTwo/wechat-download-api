@@ -392,7 +392,7 @@
             var html = '';
             articles.forEach(function(a) {
                 html += '<div class="article-card">';
-                html += '<a href="' + escHtml(a.link) + '" target="_blank" rel="noopener">';
+                html += '<a href="/article.html?id=' + a.id + '">';
 
                 if (a.cover) {
                     html += '<img class="article-cover" src="' + escHtml(a.cover) + '" alt="" loading="lazy" onerror="this.outerHTML=\'<div class=article-cover-placeholder>📄</div>\'">';

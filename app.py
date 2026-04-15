@@ -155,6 +155,11 @@ async def reader_page():
     """文章阅读页面"""
     return FileResponse(static_dir / "reader.html")
 
+@app.get("/article.html", include_in_schema=False)
+async def article_page():
+    """文章详情页面"""
+    return FileResponse(static_dir / "article.html")
+
 if __name__ == "__main__":
     import os
     import uvicorn
