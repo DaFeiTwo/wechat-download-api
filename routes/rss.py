@@ -151,6 +151,44 @@ async def get_subscriptions(request: Request):
     return SubscriptionListResponse(success=True, data=items)
 
 
+@router.get("/rss/articles", summary="获取文章列表 (JSON)")
+async def get_articles_json(
+    request: Request,
+    fakeid: Optional[str] = Query(None, description="公众号 FakeID，不传则返回所有订阅的文章"),
+    limit: int = Query(50, ge=1, le=200, description="文章数量上限"),
+):
+    """
+    获取文章列表，JSON 格式，用于阅读页面渲染。
+    """
+    subs = rss_store.list_subscriptions()
+    nickname_map = {s["fakeid"]: s for s in subs}
+    base_url = get_base_url(request)
+
+    if fakeid:
+        articles = rss_store.get_articles(fakeid, limit=limit)
+    else:
+        articles = rss_store.get_all_articles(limit=limit)
+
+    items = []
+    for a in articles:
+        sub_info = nickname_map.get(a.get("fakeid", ""), {})
+        head_img = proxy_image_url(sub_info.get("head_img", ""), base_url)
+        cover = proxy_image_url(a.get("cover", ""), base_url)
+        items.append({
+            "title": a.get("title", ""),
+            "link": a.get("link", ""),
+            "digest": a.get("digest", ""),
+            "cover": cover,
+            "author": a.get("author", ""),
+            "publish_time": a.get("publish_time", 0),
+            "nickname": sub_info.get("nickname", ""),
+            "head_img": head_img,
+            "fakeid": a.get("fakeid", ""),
+        })
+
+    return {"success": True, "data": items, "total": len(items)}
+
+
 @router.post("/rss/poll", response_model=PollerStatusResponse,
              summary="手动触发轮询")
 async def trigger_poll():

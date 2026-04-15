@@ -150,6 +150,11 @@ async def rss_page():
     """RSS 订阅管理页面"""
     return FileResponse(static_dir / "rss.html")
 
+@app.get("/reader.html", include_in_schema=False)
+async def reader_page():
+    """文章阅读页面"""
+    return FileResponse(static_dir / "reader.html")
+
 if __name__ == "__main__":
     import os
     import uvicorn
