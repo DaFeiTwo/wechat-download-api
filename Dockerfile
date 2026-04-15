@@ -1,7 +1,7 @@
 # WeChat Download API - Docker Image
 # Multi-stage build for smaller image size
 
-FROM python:3.11-slim AS builder
+FROM registry.cn-beijing.aliyuncs.com/docker-image-mirror/python:3.11-slim AS builder
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip wheel --no-cache-dir --wheel-dir=/app/wheels -r requirements.txt
 
 
-FROM python:3.11-slim
+FROM registry.cn-beijing.aliyuncs.com/docker-image-mirror/python:3.11-slim
 
 LABEL maintainer="tmwgsicp"
 LABEL description="WeChat Official Account Article Download API with RSS Support"
