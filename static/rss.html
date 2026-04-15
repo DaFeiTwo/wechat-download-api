@@ -292,6 +292,11 @@
             color: var(--primary-color);
             font-weight: 600;
             flex-shrink: 0;
+            cursor: pointer;
+        }
+
+        .sub-item-meta .latest-label:hover {
+            text-decoration: underline;
         }
 
         .sub-item-meta .latest-title {
@@ -300,6 +305,11 @@
             text-overflow: ellipsis;
             white-space: nowrap;
             max-width: 280px;
+            cursor: pointer;
+        }
+
+        .sub-item-meta .latest-title:hover {
+            color: var(--primary-color);
         }
 
         .sub-item-meta .latest-time {
@@ -518,15 +528,17 @@
                     if (s.latest_title) {
                         var displayTitle = s.latest_title.length > 20 ? s.latest_title.substring(0, 20) + '...' : s.latest_title;
                         var latestTime = s.latest_publish_time ? new Date(s.latest_publish_time * 1000).toLocaleDateString('zh-CN') : '';
+                        var articleUrl = s.latest_article_id ? '/article.html?id=' + s.latest_article_id : '#';
                         html += '<span class="latest-sep">|</span>';
-                        html += '<span class="latest-label">最新</span>';
-                        html += '<span class="latest-title" title="' + escAttr(s.latest_title) + '">' + escHtml(displayTitle) + '</span>';
+                        html += '<a href="' + articleUrl + '" class="latest-label" style="text-decoration:none;">最新</a>';
                         if (latestTime) {
                             html += '<span class="latest-time">' + latestTime + '</span>';
                         }
+                        html += '<a href="' + articleUrl + '" class="latest-title" title="' + escAttr(s.latest_title) + '" style="text-decoration:none;">' + escHtml(displayTitle) + '</a>';
                     }
                     html += '</div></div>';
                     html += '<div class="sub-item-actions">';
+                    html += '<a href="/reader.html?fakeid=' + escAttr(s.fakeid) + '" class="btn-copy" style="text-decoration:none;">阅读</a>';
                     html += '<button class="btn-copy" onclick="pollOne(this,\'' + escAttr(s.fakeid) + '\')">轮询</button>';
                     html += '<button class="btn-copy" onclick="copyRss(\'' + escAttr(s.rss_url) + '\')">复制 RSS</button>';
                     html += '<button class="btn-unsub" onclick="doUnsub(\'' + escAttr(s.fakeid) + '\')">取消</button>';

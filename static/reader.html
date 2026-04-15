@@ -439,6 +439,9 @@
         }
 
         async function loadArticles() {
+            var urlParams = new URLSearchParams(window.location.search);
+            var initFakeid = urlParams.get('fakeid') || '';
+
             try {
                 var res = await fetch('/api/rss/articles?limit=100');
                 var d = await res.json();
@@ -449,7 +452,6 @@
                 }
 
                 allArticles = d.data || [];
-                renderArticles(allArticles);
 
                 // Build filter tags
                 var seen = {};
@@ -461,13 +463,23 @@
                     }
                 });
 
-                if (sources.length > 1) {
+                if (sources.length > 0) {
                     var tagsEl = document.getElementById('filterTags');
-                    var tagsHtml = '<span class="filter-tag active" data-fakeid="" onclick="filterBy(this, \'\')">全部</span>';
+                    var tagsHtml = '<span class="filter-tag' + (!initFakeid ? ' active' : '') + '" data-fakeid="" onclick="filterBy(this, \'\')">全部</span>';
                     sources.forEach(function(s) {
-                        tagsHtml += '<span class="filter-tag" data-fakeid="' + escHtml(s.fakeid) + '" onclick="filterBy(this, \'' + escHtml(s.fakeid) + '\')">' + escHtml(s.nickname) + '</span>';
+                        var isActive = (s.fakeid === initFakeid) ? ' active' : '';
+                        tagsHtml += '<span class="filter-tag' + isActive + '" data-fakeid="' + escHtml(s.fakeid) + '" onclick="filterBy(this, \'' + escHtml(s.fakeid) + '\')">' + escHtml(s.nickname) + '</span>';
                     });
                     tagsEl.innerHTML = tagsHtml;
+                }
+
+                // Apply initial filter
+                if (initFakeid) {
+                    currentFakeid = initFakeid;
+                    var filtered = allArticles.filter(function(a) { return a.fakeid === initFakeid; });
+                    renderArticles(filtered);
+                } else {
+                    renderArticles(allArticles);
                 }
             } catch (e) {
                 document.getElementById('articleGrid').innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div class="text">网络错误: ' + escHtml(e.message) + '</div></div>';

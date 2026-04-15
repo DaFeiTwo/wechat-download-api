@@ -106,7 +106,9 @@ def list_subscriptions() -> List[Dict]:
             "(SELECT a2.title FROM articles a2 WHERE a2.fakeid=s.fakeid "
             " ORDER BY a2.publish_time DESC LIMIT 1) AS latest_title, "
             "(SELECT a2.publish_time FROM articles a2 WHERE a2.fakeid=s.fakeid "
-            " ORDER BY a2.publish_time DESC LIMIT 1) AS latest_publish_time "
+            " ORDER BY a2.publish_time DESC LIMIT 1) AS latest_publish_time, "
+            "(SELECT a2.id FROM articles a2 WHERE a2.fakeid=s.fakeid "
+            " ORDER BY a2.publish_time DESC LIMIT 1) AS latest_article_id "
             "FROM subscriptions s ORDER BY s.created_at DESC"
         ).fetchall()
         return [dict(r) for r in rows]
