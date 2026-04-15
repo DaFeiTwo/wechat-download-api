@@ -280,7 +280,31 @@
             color: var(--text-muted);
             margin-top: 2px;
             display: flex;
+            align-items: center;
             gap: var(--space-md);
+        }
+
+        .sub-item-meta .latest-sep {
+            color: var(--border-base);
+        }
+
+        .sub-item-meta .latest-label {
+            color: var(--primary-color);
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .sub-item-meta .latest-title {
+            color: var(--text-secondary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 280px;
+        }
+
+        .sub-item-meta .latest-time {
+            color: var(--text-muted);
+            flex-shrink: 0;
         }
 
         .sub-item-actions {
@@ -370,6 +394,7 @@
             .status-bar { flex-direction: column; gap: var(--space-sm); }
             .sub-item { flex-direction: column; align-items: flex-start; }
             .sub-item-actions { width: 100%; }
+            .sub-item-meta .latest-title { max-width: 120px; }
         }
     </style>
 </head>
@@ -489,6 +514,16 @@
                     html += '<div class="sub-item-meta">';
                     html += '<span>' + s.article_count + ' 篇文章</span>';
                     html += '<span>最后轮询: ' + lastPoll + '</span>';
+                    if (s.latest_title) {
+                        var displayTitle = s.latest_title.length > 20 ? s.latest_title.substring(0, 20) + '...' : s.latest_title;
+                        var latestTime = s.latest_publish_time ? new Date(s.latest_publish_time * 1000).toLocaleDateString('zh-CN') : '';
+                        html += '<span class="latest-sep">|</span>';
+                        html += '<span class="latest-label">最新</span>';
+                        html += '<span class="latest-title" title="' + escAttr(s.latest_title) + '">' + escHtml(displayTitle) + '</span>';
+                        if (latestTime) {
+                            html += '<span class="latest-time">' + latestTime + '</span>';
+                        }
+                    }
                     html += '</div></div>';
                     html += '<div class="sub-item-actions">';
                     html += '<button class="btn-copy" onclick="copyRss(\'' + escAttr(s.rss_url) + '\')">复制 RSS</button>';

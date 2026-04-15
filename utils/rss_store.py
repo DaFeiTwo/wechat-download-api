@@ -102,7 +102,11 @@ def list_subscriptions() -> List[Dict]:
     try:
         rows = conn.execute(
             "SELECT s.*, "
-            "(SELECT COUNT(*) FROM articles a WHERE a.fakeid=s.fakeid) AS article_count "
+            "(SELECT COUNT(*) FROM articles a WHERE a.fakeid=s.fakeid) AS article_count, "
+            "(SELECT a2.title FROM articles a2 WHERE a2.fakeid=s.fakeid "
+            " ORDER BY a2.publish_time DESC LIMIT 1) AS latest_title, "
+            "(SELECT a2.publish_time FROM articles a2 WHERE a2.fakeid=s.fakeid "
+            " ORDER BY a2.publish_time DESC LIMIT 1) AS latest_publish_time "
             "FROM subscriptions s ORDER BY s.created_at DESC"
         ).fetchall()
         return [dict(r) for r in rows]
