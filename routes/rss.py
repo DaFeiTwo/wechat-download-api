@@ -253,6 +253,22 @@ async def trigger_poll():
         )
 
 
+@router.post("/rss/poll/{fakeid}", summary="手动触发单个公众号轮询")
+async def trigger_poll_one(fakeid: str):
+    """
+    手动触发单个公众号的轮询，立即拉取该公众号的最新文章。
+    """
+    sub = rss_store.get_subscription(fakeid)
+    if not sub:
+        raise HTTPException(status_code=404, detail="未找到该订阅")
+
+    result = await rss_poller.poll_one(fakeid)
+    return PollerStatusResponse(
+        success=result["success"],
+        data={"message": result["message"]},
+    )
+
+
 @router.get("/rss/status", response_model=PollerStatusResponse,
             summary="轮询器状态")
 async def poller_status():

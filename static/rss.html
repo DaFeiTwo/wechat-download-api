@@ -527,6 +527,7 @@
                     }
                     html += '</div></div>';
                     html += '<div class="sub-item-actions">';
+                    html += '<button class="btn-copy" onclick="pollOne(this,\'' + escAttr(s.fakeid) + '\')">轮询</button>';
                     html += '<button class="btn-copy" onclick="copyRss(\'' + escAttr(s.rss_url) + '\')">复制 RSS</button>';
                     html += '<button class="btn-unsub" onclick="doUnsub(\'' + escAttr(s.fakeid) + '\')">取消</button>';
                     html += '</div></div></li>';
@@ -650,6 +651,23 @@
                 loadSubscriptions();
             } catch (e) {
                 showToast('轮询失败: ' + e.message);
+            }
+        }
+
+        async function pollOne(btnEl, fakeid) {
+            var origText = btnEl.textContent;
+            btnEl.disabled = true;
+            btnEl.textContent = '轮询中...';
+            try {
+                var res = await fetch('/api/rss/poll/' + encodeURIComponent(fakeid), { method: 'POST' });
+                var d = await res.json();
+                showToast(d.data && d.data.message ? d.data.message : '轮询完成');
+                loadSubscriptions();
+            } catch (e) {
+                showToast('轮询失败: ' + e.message);
+            } finally {
+                btnEl.disabled = false;
+                btnEl.textContent = origText;
             }
         }
 

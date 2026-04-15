@@ -169,8 +169,34 @@ class RSSPoller:
         return articles
 
     async def poll_now(self):
-        """手动触发一次轮询"""
+        """手动触发一次全量轮询"""
         await self._poll_all()
+
+    async def poll_one(self, fakeid: str) -> Dict:
+        """手动触发单个公众号的轮询，返回结果摘要"""
+        creds = auth_manager.get_credentials()
+        if not creds or not creds.get("token") or not creds.get("cookie"):
+            return {"success": False, "message": "未登录，无法轮询"}
+
+        try:
+            articles = await self._fetch_article_list(fakeid, creds)
+            if articles and FETCH_FULL_CONTENT:
+                articles = await self._enrich_articles_content(articles)
+
+            new_count = 0
+            if articles:
+                new_count = rss_store.save_articles(fakeid, articles)
+            rss_store.update_last_poll(fakeid)
+
+            return {
+                "success": True,
+                "message": f"轮询完成，获取 {len(articles)} 篇，新增 {new_count} 篇",
+                "total": len(articles),
+                "new_count": new_count,
+            }
+        except Exception as e:
+            logger.error("RSS poll_one error for %s: %s", fakeid[:8], e)
+            return {"success": False, "message": f"轮询出错: {str(e)}"}
     
     async def _enrich_articles_content(self, articles: List[Dict]) -> List[Dict]:
         """
