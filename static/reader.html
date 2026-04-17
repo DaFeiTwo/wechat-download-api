@@ -731,16 +731,25 @@
             applyFilters();
         }
 
-        function updateUnreadCount() {
-            var list = allArticles;
-            var count = list.filter(function(a) { return !a.read_at; }).length;
-            var el = document.getElementById('unreadCount');
-            if (count > 0) {
-                el.textContent = count > 99 ? '99+' : count;
-                el.style.display = '';
-            } else {
-                el.style.display = 'none';
-            }
+        async function updateUnreadCount() {
+            try {
+                var res = await fetch('/api/rss/unread/count');
+                var d = await res.json();
+                if (!d.success) return;
+                var count = 0;
+                if (currentFakeid) {
+                    count = (d.by_fakeid && d.by_fakeid[currentFakeid]) || 0;
+                } else {
+                    count = d.count || 0;
+                }
+                var el = document.getElementById('unreadCount');
+                if (count > 0) {
+                    el.textContent = count > 99 ? '99+' : count;
+                    el.style.display = '';
+                } else {
+                    el.style.display = 'none';
+                }
+            } catch (e) {}
         }
 
         async function markCurrentRead() {
