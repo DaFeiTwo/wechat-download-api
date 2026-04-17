@@ -117,6 +117,7 @@
             font-weight: 600;
             line-height: 18px;
             text-align: center;
+            cursor: pointer;
         }
 
         /* Filter bar */
@@ -350,7 +351,7 @@
             <div class="header-actions">
                 <span class="btn-wrap">
                     <button class="btn-sm" id="unreadBtn" onclick="toggleUnread()">筛选未读</button>
-                    <span class="unread-count" id="unreadCount" style="display:none"></span>
+                    <span class="unread-count" id="unreadCount" style="display:none" onclick="markCurrentRead()"></span>
                 </span>
                 <a href="/admin.html" class="btn-sm">管理面板</a>
                 <a href="/rss.html" class="btn-sm">RSS 管理</a>
@@ -541,6 +542,24 @@
             } else {
                 el.style.display = 'none';
             }
+        }
+
+        async function markCurrentRead() {
+            var url = '/api/rss/read/all';
+            if (currentFakeid) {
+                url += '?fakeid=' + encodeURIComponent(currentFakeid);
+            }
+            try {
+                await fetch(url, { method: 'POST' });
+                // 更新本地数据
+                var now = Math.floor(Date.now() / 1000);
+                allArticles.forEach(function(a) {
+                    if (!currentFakeid || a.fakeid === currentFakeid) {
+                        if (!a.read_at) a.read_at = now;
+                    }
+                });
+                applyFilters();
+            } catch (e) {}
         }
 
         window.addEventListener('load', loadArticles);

@@ -241,9 +241,12 @@ async def get_unread_count():
 
 
 @router.post("/rss/read/all", summary="全部标记已读")
-async def mark_all_read():
-    """将所有未读文章标记为已读。"""
-    count = rss_store.mark_all_read()
+async def mark_all_read(fakeid: Optional[str] = Query(None, description="公众号 FakeID，不传则标记所有")):
+    """将未读文章标记为已读。传 fakeid 只标记该公众号，不传标记全部。"""
+    if fakeid:
+        count = rss_store.mark_read_by_fakeid(fakeid)
+    else:
+        count = rss_store.mark_all_read()
     return {"success": True, "message": f"已标记 {count} 篇为已读"}
 
 

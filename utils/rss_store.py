@@ -289,3 +289,17 @@ def mark_all_read() -> int:
         conn.close()
 
 
+def mark_read_by_fakeid(fakeid: str) -> int:
+    """标记指定公众号的所有文章为已读，返回标记数量"""
+    conn = _get_conn()
+    try:
+        conn.execute(
+            "UPDATE articles SET read_at = ? WHERE fakeid = ? AND read_at = 0",
+            (int(time.time()), fakeid),
+        )
+        conn.commit()
+        return conn.total_changes
+    finally:
+        conn.close()
+
+
