@@ -510,6 +510,7 @@
                     return;
                 }
                 updateAggRssBar(true);
+
                 var html = '<ul class="sub-list">';
                 d.data.forEach(function(s) {
                     var lastPoll = s.last_poll ? new Date(s.last_poll * 1000).toLocaleString('zh-CN') : '从未';

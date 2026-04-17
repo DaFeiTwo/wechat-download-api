@@ -58,6 +58,7 @@ def init_db():
             plain_content TEXT NOT NULL DEFAULT '',
             publish_time INTEGER NOT NULL DEFAULT 0,
             fetched_at  INTEGER NOT NULL,
+            read_at     INTEGER NOT NULL DEFAULT 0,
             UNIQUE(fakeid, link),
             FOREIGN KEY (fakeid) REFERENCES subscriptions(fakeid) ON DELETE CASCADE
         );
@@ -66,6 +67,15 @@ def init_db():
             ON articles(fakeid, publish_time DESC);
     """)
     conn.commit()
+    
+    # 迁移：为已有数据库补上 read_at 列
+    try:
+        conn.execute("ALTER TABLE articles ADD COLUMN read_at INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+        logger.info("Migration: added read_at column to articles table")
+    except sqlite3.OperationalError:
+        pass  # 列已存在，忽略
+    
     conn.close()
     logger.info("RSS database initialized: %s", DB_PATH)
 
@@ -232,6 +242,58 @@ def get_article_by_id(article_id: int) -> Optional[Dict]:
             "SELECT * FROM articles WHERE id=?", (article_id,)
         ).fetchone()
         return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def get_unread_count() -> int:
+    """获取未读文章总数"""
+    conn = _get_conn()
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM articles WHERE read_at = 0"
+        ).fetchone()
+        return row["cnt"] if row else 0
+    finally:
+        conn.close()
+
+
+def get_unread_counts_by_fakeid() -> Dict[str, int]:
+    """获取每个公众号的未读文章数"""
+    conn = _get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT fakeid, COUNT(*) AS cnt FROM articles WHERE read_at = 0 GROUP BY fakeid"
+        ).fetchall()
+        return {r["fakeid"]: r["cnt"] for r in rows}
+    finally:
+        conn.close()
+
+
+def mark_article_read(article_id: int) -> bool:
+    """标记单篇文章为已读"""
+    conn = _get_conn()
+    try:
+        conn.execute(
+            "UPDATE articles SET read_at = ? WHERE id = ? AND read_at = 0",
+            (int(time.time()), article_id),
+        )
+        conn.commit()
+        return conn.total_changes > 0
+    finally:
+        conn.close()
+
+
+def mark_all_read() -> int:
+    """标记所有文章为已读，返回标记数量"""
+    conn = _get_conn()
+    try:
+        conn.execute(
+            "UPDATE articles SET read_at = ? WHERE read_at = 0",
+            (int(time.time()),),
+        )
+        conn.commit()
+        return conn.total_changes
     finally:
         conn.close()
 

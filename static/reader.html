@@ -326,6 +326,7 @@
                 <p>浏览订阅公众号的最新文章</p>
             </div>
             <div class="header-actions">
+                <button class="btn-sm" id="unreadBtn" onclick="toggleUnread()">筛选未读</button>
                 <a href="/admin.html" class="btn-sm">管理面板</a>
                 <a href="/rss.html" class="btn-sm">RSS 管理</a>
             </div>
@@ -355,6 +356,7 @@
     <script>
         var allArticles = [];
         var currentFakeid = '';
+        var showUnreadOnly = false;
 
         function escHtml(s) {
             var d = document.createElement('div');
@@ -430,12 +432,7 @@
             tags.forEach(function(t) { t.classList.remove('active'); });
             el.classList.add('active');
 
-            if (!fakeid) {
-                renderArticles(allArticles);
-            } else {
-                var filtered = allArticles.filter(function(a) { return a.fakeid === fakeid; });
-                renderArticles(filtered);
-            }
+            applyFilters();
         }
 
         async function loadArticles() {
@@ -476,14 +473,33 @@
                 // Apply initial filter
                 if (initFakeid) {
                     currentFakeid = initFakeid;
-                    var filtered = allArticles.filter(function(a) { return a.fakeid === initFakeid; });
-                    renderArticles(filtered);
-                } else {
-                    renderArticles(allArticles);
                 }
+                applyFilters();
             } catch (e) {
                 document.getElementById('articleGrid').innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div class="text">网络错误: ' + escHtml(e.message) + '</div></div>';
             }
+        }
+
+        function applyFilters() {
+            var list = allArticles;
+            if (currentFakeid) {
+                list = list.filter(function(a) { return a.fakeid === currentFakeid; });
+            }
+            if (showUnreadOnly) {
+                list = list.filter(function(a) { return !a.read_at; });
+            }
+            renderArticles(list);
+        }
+
+        function toggleUnread() {
+            showUnreadOnly = !showUnreadOnly;
+            var btn = document.getElementById('unreadBtn');
+            if (showUnreadOnly) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+            applyFilters();
         }
 
         window.addEventListener('load', loadArticles);

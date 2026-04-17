@@ -185,6 +185,7 @@ async def get_articles_json(
             "nickname": sub_info.get("nickname", ""),
             "head_img": head_img,
             "fakeid": a.get("fakeid", ""),
+            "read_at": a.get("read_at", 0),
         })
 
     return {"success": True, "data": items, "total": len(items)}
@@ -194,10 +195,14 @@ async def get_articles_json(
 async def get_article_detail(article_id: int, request: Request):
     """
     获取单篇文章的完整内容，用于站内阅读页渲染。
+    同时自动标记该文章为已读。
     """
     article = rss_store.get_article_by_id(article_id)
     if not article:
         raise HTTPException(status_code=404, detail="文章不存在")
+
+    # 自动标记已读
+    rss_store.mark_article_read(article_id)
 
     base_url = get_base_url(request)
     sub = rss_store.get_subscription(article.get("fakeid", ""))
@@ -225,6 +230,21 @@ async def get_article_detail(article_id: int, request: Request):
             "fakeid": article.get("fakeid", ""),
         },
     }
+
+
+@router.get("/rss/unread/count", summary="获取未读文章数量")
+async def get_unread_count():
+    """获取未读文章总数和每个公众号的未读数，用于角标展示。"""
+    total = rss_store.get_unread_count()
+    by_fakeid = rss_store.get_unread_counts_by_fakeid()
+    return {"success": True, "count": total, "by_fakeid": by_fakeid}
+
+
+@router.post("/rss/read/all", summary="全部标记已读")
+async def mark_all_read():
+    """将所有未读文章标记为已读。"""
+    count = rss_store.mark_all_read()
+    return {"success": True, "message": f"已标记 {count} 篇为已读"}
 
 
 @router.post("/rss/poll", response_model=PollerStatusResponse,
