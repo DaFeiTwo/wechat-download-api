@@ -157,6 +157,7 @@ async def get_articles_json(
     fakeid: Optional[str] = Query(None, description="公众号 FakeID，不传则返回所有订阅的文章"),
     page: int = Query(1, ge=1, description="页码，从 1 开始"),
     page_size: int = Query(10, ge=1, le=100, description="每页文章数量"),
+    unread_only: bool = Query(False, description="是否只返回未读文章"),
 ):
     """
     获取文章列表，JSON 格式，用于阅读页面渲染。
@@ -167,9 +168,9 @@ async def get_articles_json(
     base_url = get_base_url(request)
 
     if fakeid:
-        result = rss_store.get_articles_paged(fakeid, page=page, page_size=page_size)
+        result = rss_store.get_articles_paged(fakeid, page=page, page_size=page_size, unread_only=unread_only)
     else:
-        result = rss_store.get_all_articles_paged(page=page, page_size=page_size)
+        result = rss_store.get_all_articles_paged(page=page, page_size=page_size, unread_only=unread_only)
 
     articles = result["items"]
     total = result["total"]

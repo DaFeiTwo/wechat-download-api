@@ -663,6 +663,9 @@
                 if (fakeid) {
                     url += '&fakeid=' + encodeURIComponent(fakeid);
                 }
+                if (showUnreadOnly) {
+                    url += '&unread_only=true';
+                }
                 var res = await fetch(url);
                 var d = await res.json();
                 if (!d.success) {
@@ -712,22 +715,20 @@
         }
 
         function applyFilters() {
-            var list = allArticles;
-            if (showUnreadOnly) {
-                list = list.filter(function(a) { return !a.read_at; });
-            }
-            renderArticles(list);
+            renderArticles(allArticles);
             updateUnreadCount();
         }
 
-        function toggleUnread() {
+        async function toggleUnread() {
             showUnreadOnly = !showUnreadOnly;
+            currentPage = 1;
             var btn = document.getElementById('unreadBtn');
             if (showUnreadOnly) {
                 btn.classList.add('active');
             } else {
                 btn.classList.remove('active');
             }
+            await fetchArticles(currentFakeid, 1);
             applyFilters();
         }
 

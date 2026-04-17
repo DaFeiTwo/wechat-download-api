@@ -203,18 +203,23 @@ def get_articles(fakeid: str, limit: int = 20) -> List[Dict]:
         conn.close()
 
 
-def get_articles_paged(fakeid: str, page: int = 1, page_size: int = 10) -> dict:
+def get_articles_paged(fakeid: str, page: int = 1, page_size: int = 10,
+                       unread_only: bool = False) -> dict:
     """分页获取指定公众号的文章"""
     conn = _get_conn()
     try:
+        where = "WHERE fakeid=?"
+        params = [fakeid]
+        if unread_only:
+            where += " AND read_at = 0"
         total = conn.execute(
-            "SELECT COUNT(*) AS cnt FROM articles WHERE fakeid=?", (fakeid,)
+            "SELECT COUNT(*) AS cnt FROM articles " + where, params
         ).fetchone()["cnt"]
         offset = (page - 1) * page_size
         rows = conn.execute(
-            "SELECT * FROM articles WHERE fakeid=? "
-            "ORDER BY publish_time DESC LIMIT ? OFFSET ?",
-            (fakeid, page_size, offset),
+            "SELECT * FROM articles " + where +
+            " ORDER BY publish_time DESC LIMIT ? OFFSET ?",
+            params + [page_size, offset],
         ).fetchall()
         return {"items": [dict(r) for r in rows], "total": total}
     finally:
@@ -243,16 +248,19 @@ def get_all_articles(limit: int = 50) -> List[Dict]:
         conn.close()
 
 
-def get_all_articles_paged(page: int = 1, page_size: int = 10) -> dict:
+def get_all_articles_paged(page: int = 1, page_size: int = 10,
+                           unread_only: bool = False) -> dict:
     """分页获取所有文章"""
     conn = _get_conn()
     try:
+        where = "WHERE read_at = 0" if unread_only else ""
         total = conn.execute(
-            "SELECT COUNT(*) AS cnt FROM articles"
+            "SELECT COUNT(*) AS cnt FROM articles " + where
         ).fetchone()["cnt"]
         offset = (page - 1) * page_size
         rows = conn.execute(
-            "SELECT * FROM articles ORDER BY publish_time DESC LIMIT ? OFFSET ?",
+            "SELECT * FROM articles " + where +
+            " ORDER BY publish_time DESC LIMIT ? OFFSET ?",
             (page_size, offset),
         ).fetchall()
         return {"items": [dict(r) for r in rows], "total": total}
