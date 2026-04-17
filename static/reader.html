@@ -339,6 +339,80 @@
         @media (min-width: 769px) and (max-width: 1024px) {
             .article-grid { grid-template-columns: repeat(2, 1fr); }
         }
+
+        /* 自定义确认弹窗 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.visible {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-primary);
+            border-radius: var(--radius-large);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+            padding: var(--space-lg);
+            max-width: 360px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .modal-title {
+            font-size: var(--font-base);
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: var(--space-sm);
+        }
+
+        .modal-desc {
+            font-size: var(--font-sm);
+            color: var(--text-secondary);
+            margin-bottom: var(--space-lg);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: var(--space-sm);
+            justify-content: center;
+        }
+
+        .modal-actions button {
+            padding: 8px 28px;
+            border-radius: var(--radius-base);
+            font-size: var(--font-sm);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--duration-fast) var(--ease-in-out);
+        }
+
+        .modal-cancel {
+            border: 1px solid var(--border-base);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        .modal-cancel:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .modal-confirm {
+            border: none;
+            background: var(--primary-color);
+            color: #fff;
+        }
+
+        .modal-confirm:hover {
+            background: #096dd9;
+        }
     </style>
 </head>
 <body>
@@ -375,6 +449,18 @@
                 <a href="/admin.html">管理面板</a>
                 <a href="/rss.html">RSS 管理</a>
                 <a href="https://github.com/tmwgsicp/wechat-download-api" target="_blank">GitHub</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 确认弹窗 -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-title">标记已读</div>
+            <div class="modal-desc" id="modalDesc">确定将当前文章全部标记为已读？</div>
+            <div class="modal-actions">
+                <button class="modal-cancel" onclick="closeModal()">取消</button>
+                <button class="modal-confirm" onclick="confirmMarkRead()">确定</button>
             </div>
         </div>
     </div>
@@ -545,13 +631,23 @@
         }
 
         async function markCurrentRead() {
+            var desc = currentFakeid ? '确定将该公众号的文章全部标记为已读？' : '确定将所有文章标记为已读？';
+            document.getElementById('modalDesc').textContent = desc;
+            document.getElementById('modalOverlay').classList.add('visible');
+        }
+
+        function closeModal() {
+            document.getElementById('modalOverlay').classList.remove('visible');
+        }
+
+        async function confirmMarkRead() {
+            closeModal();
             var url = '/api/rss/read/all';
             if (currentFakeid) {
                 url += '?fakeid=' + encodeURIComponent(currentFakeid);
             }
             try {
                 await fetch(url, { method: 'POST' });
-                // 更新本地数据
                 var now = Math.floor(Date.now() / 1000);
                 allArticles.forEach(function(a) {
                     if (!currentFakeid || a.fakeid === currentFakeid) {
