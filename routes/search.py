@@ -9,6 +9,7 @@
 """
 
 import os
+import logging
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel
 from typing import Optional, List
@@ -16,6 +17,9 @@ import time
 import httpx
 from utils.auth_manager import auth_manager
 from utils.image_proxy import proxy_image_url
+from utils.webhook import webhook
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -92,7 +96,9 @@ async def search_accounts(query: str = Query(..., description="公众号名称�
             
             result = response.json()
             
-            if result.get("base_resp", {}).get("ret") == 0:
+            ret = result.get("base_resp", {}).get("ret", -1)
+            
+            if ret == 0:
                 accounts = result.get("list", [])
                 
                 # 获取 base_url 用于图片代理
@@ -119,9 +125,21 @@ async def search_accounts(query: str = Query(..., description="公众号名称�
                     }
                 )
             else:
+                err_msg = result.get("base_resp", {}).get("err_msg", "未知错误")
+                logger.warning("搜索公众号失败: ret=%s, err_msg=%s", ret, err_msg)
+                
+                # ret=200013 表示 token 无效/过期，其他非零 ret 也大概率是登录失效
+                # 主动发送登录过期通知，避免用户不知道登录已掉
+                nickname = credentials.get("nickname", "未知账号")
+                await webhook.notify('login_expired', {
+                    'nickname': nickname,
+                    'message': f'搜索公众号时检测到登录已失效 (ret={ret})，请重新登录',
+                    'api_error': err_msg,
+                })
+                
                 return SearchResponse(
                     success=False,
-                    error=f"搜索失败: {result.get('base_resp', {}).get('err_msg', '未知错误')}"
+                    error=f"搜索失败（登录可能已过期，请重新登录）: {err_msg}"
                 )
                 
     except Exception as e:

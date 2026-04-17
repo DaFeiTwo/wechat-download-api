@@ -22,6 +22,7 @@ from utils.auth_manager import auth_manager
 from utils import rss_store
 from utils.helpers import extract_article_info, parse_article_url, is_image_text_message, has_article_content, is_article_unavailable, get_unavailable_reason
 from utils.http_client import fetch_page
+from utils.webhook import webhook
 
 logger = logging.getLogger(__name__)
 
@@ -132,8 +133,18 @@ class RSSPoller:
 
         base_resp = result.get("base_resp", {})
         if base_resp.get("ret") != 0:
-            logger.warning("WeChat API error for %s: ret=%s",
-                           fakeid[:8], base_resp.get("ret"))
+            ret = base_resp.get("ret")
+            err_msg = base_resp.get("err_msg", "")
+            logger.warning("WeChat API error for %s: ret=%s, err_msg=%s",
+                           fakeid[:8], ret, err_msg)
+            
+            # 微信 API 返回非零 ret，大概率登录已失效，发送通知
+            nickname = creds.get("nickname", "未知账号")
+            await webhook.notify('login_expired', {
+                'nickname': nickname,
+                'message': f'RSS 轮询时检测到登录已失效 (ret={ret})，请重新登录',
+                'api_error': err_msg,
+            })
             return []
 
         publish_page = result.get("publish_page", {})

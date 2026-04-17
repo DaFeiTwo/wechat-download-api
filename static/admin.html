@@ -635,7 +635,7 @@
                     var detailParts = [];
                     if (data.fakeid) detailParts.push('FakeID: ' + data.fakeid);
                     if (data.isExpired) {
-                        detailParts.push('凭证可能已过期');
+                        detailParts.push(data.status || '登录已失效，请重新登录');
                         icon.className = 'status-icon offline';
                         icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fa8c16" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
                     } else {
@@ -645,6 +645,7 @@
 
                     actions.innerHTML =
                         '<button class="btn-sm" onclick="checkStatus()">刷新</button>' +
+                        '<button class="btn-sm btn-primary" onclick="verifyStatus()">验证登录</button>' +
                         '<button class="btn-sm btn-danger" onclick="doLogout()">退出登录</button>';
                 } else {
                     icon.className = 'status-icon offline';
@@ -663,6 +664,35 @@
                 detail.textContent = e.message;
 
                 actions.innerHTML = '<button class="btn-sm" onclick="checkStatus()">重试</button>';
+            }
+        }
+
+        async function verifyStatus() {
+            var icon = document.getElementById('statusIcon');
+            var val = document.getElementById('statusValue');
+            var detail = document.getElementById('statusDetail');
+
+            val.textContent = '正在向微信验证...';
+            detail.textContent = '';
+
+            try {
+                var res = await fetch('/api/admin/status?verify=true');
+                var data = await res.json();
+
+                if (data.isExpired) {
+                    icon.className = 'status-icon offline';
+                    icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fa8c16" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+                    val.textContent = data.nickname || '已登录';
+                    detail.textContent = data.status || '登录已失效，请重新登录';
+                } else {
+                    icon.className = 'status-icon online';
+                    icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#52c41a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+                    val.textContent = data.nickname || '已登录';
+                    detail.textContent = '微信验证通过，登录有效';
+                }
+            } catch (e) {
+                val.textContent = '验证失败';
+                detail.textContent = e.message;
             }
         }
 
