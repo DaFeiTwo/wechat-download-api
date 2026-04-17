@@ -203,6 +203,24 @@ def get_articles(fakeid: str, limit: int = 20) -> List[Dict]:
         conn.close()
 
 
+def get_articles_paged(fakeid: str, page: int = 1, page_size: int = 10) -> dict:
+    """分页获取指定公众号的文章"""
+    conn = _get_conn()
+    try:
+        total = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM articles WHERE fakeid=?", (fakeid,)
+        ).fetchone()["cnt"]
+        offset = (page - 1) * page_size
+        rows = conn.execute(
+            "SELECT * FROM articles WHERE fakeid=? "
+            "ORDER BY publish_time DESC LIMIT ? OFFSET ?",
+            (fakeid, page_size, offset),
+        ).fetchall()
+        return {"items": [dict(r) for r in rows], "total": total}
+    finally:
+        conn.close()
+
+
 def get_all_fakeids() -> List[str]:
     conn = _get_conn()
     try:
@@ -221,6 +239,23 @@ def get_all_articles(limit: int = 50) -> List[Dict]:
             (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_all_articles_paged(page: int = 1, page_size: int = 10) -> dict:
+    """分页获取所有文章"""
+    conn = _get_conn()
+    try:
+        total = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM articles"
+        ).fetchone()["cnt"]
+        offset = (page - 1) * page_size
+        rows = conn.execute(
+            "SELECT * FROM articles ORDER BY publish_time DESC LIMIT ? OFFSET ?",
+            (page_size, offset),
+        ).fetchall()
+        return {"items": [dict(r) for r in rows], "total": total}
     finally:
         conn.close()
 

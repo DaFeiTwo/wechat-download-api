@@ -312,6 +312,61 @@
 
         @keyframes spin { to { transform: rotate(360deg); } }
 
+        /* Pagination */
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-sm);
+            margin-top: var(--space-lg);
+            flex-wrap: wrap;
+        }
+
+        .page-btn {
+            min-width: 36px;
+            height: 36px;
+            padding: 0 10px;
+            border: 1px solid var(--border-base);
+            border-radius: var(--radius-base);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: var(--font-sm);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all var(--duration-fast) var(--ease-in-out);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .page-btn:hover:not(.disabled):not(.active) {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .page-btn.active {
+            background: var(--primary-color);
+            color: #fff;
+            border-color: var(--primary-color);
+        }
+
+        .page-btn.disabled {
+            color: var(--border-base);
+            cursor: not-allowed;
+        }
+
+        .page-ellipsis {
+            color: var(--text-muted);
+            font-size: var(--font-sm);
+            padding: 0 4px;
+        }
+
+        .page-info {
+            font-size: var(--font-xs);
+            color: var(--text-muted);
+            margin-left: var(--space-sm);
+        }
+
         /* Footer */
         .footer {
             margin-top: var(--space-xl);
@@ -443,6 +498,8 @@
             <div class="loading-state"><span class="loading-spinner"></span>加载中...</div>
         </div>
 
+        <div id="pagination"></div>
+
         <div class="footer">
             <span>WeChat Download API v1.0.0</span>
             <div class="footer-links">
@@ -469,6 +526,11 @@
         var allArticles = [];
         var currentFakeid = '';
         var showUnreadOnly = false;
+        var allSources = [];
+        var currentPage = 1;
+        var totalPages = 1;
+        var totalArticles = 0;
+        var PAGE_SIZE = 10;
 
         function escHtml(s) {
             var d = document.createElement('div');
@@ -500,6 +562,7 @@
 
             if (!articles || articles.length === 0) {
                 grid.innerHTML = '<div class="empty-state"><div class="icon">📭</div><div class="text">暂无文章，请先添加订阅并等待轮询</div></div>';
+                renderPagination();
                 return;
             }
 
@@ -535,16 +598,84 @@
             });
 
             grid.innerHTML = html;
+            renderPagination();
         }
 
-        function filterBy(el, fakeid) {
+        function renderPagination() {
+            var container = document.getElementById('pagination');
+            if (totalPages <= 1) {
+                container.innerHTML = '';
+                return;
+            }
+
+            var html = '<div class="pagination">';
+            html += '<button class="page-btn' + (currentPage <= 1 ? ' disabled' : '') + '" onclick="goPage(' + (currentPage - 1) + ')"' + (currentPage <= 1 ? ' disabled' : '') + '>&laquo; 上一页</button>';
+
+            // 页码按钮逻辑：显示当前页附近的页码
+            var startPage = Math.max(1, currentPage - 2);
+            var endPage = Math.min(totalPages, currentPage + 2);
+
+            if (startPage > 1) {
+                html += '<button class="page-btn" onclick="goPage(1)">1</button>';
+                if (startPage > 2) html += '<span class="page-ellipsis">...</span>';
+            }
+
+            for (var i = startPage; i <= endPage; i++) {
+                html += '<button class="page-btn' + (i === currentPage ? ' active' : '') + '" onclick="goPage(' + i + ')">' + i + '</button>';
+            }
+
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) html += '<span class="page-ellipsis">...</span>';
+                html += '<button class="page-btn" onclick="goPage(' + totalPages + ')">' + totalPages + '</button>';
+            }
+
+            html += '<button class="page-btn' + (currentPage >= totalPages ? ' disabled' : '') + '" onclick="goPage(' + (currentPage + 1) + ')"' + (currentPage >= totalPages ? ' disabled' : '') + '>下一页 &raquo;</button>';
+            html += '<span class="page-info">共 ' + totalArticles + ' 篇</span>';
+            html += '</div>';
+            container.innerHTML = html;
+        }
+
+        async function goPage(page) {
+            if (page < 1 || page > totalPages || page === currentPage) return;
+            currentPage = page;
+            await fetchArticles(currentFakeid, currentPage);
+            applyFilters();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        async function filterBy(el, fakeid) {
             currentFakeid = fakeid;
+            currentPage = 1;
 
             var tags = document.querySelectorAll('.filter-tag');
             tags.forEach(function(t) { t.classList.remove('active'); });
             el.classList.add('active');
 
+            await fetchArticles(fakeid, 1);
             applyFilters();
+        }
+
+        async function fetchArticles(fakeid, page) {
+            var grid = document.getElementById('articleGrid');
+            grid.innerHTML = '<div class="loading-state"><span class="loading-spinner"></span>加载中...</div>';
+            try {
+                var url = '/api/rss/articles?page=' + (page || 1) + '&page_size=' + PAGE_SIZE;
+                if (fakeid) {
+                    url += '&fakeid=' + encodeURIComponent(fakeid);
+                }
+                var res = await fetch(url);
+                var d = await res.json();
+                if (!d.success) {
+                    grid.innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div class="text">加载失败</div></div>';
+                    return;
+                }
+                allArticles = d.data || [];
+                totalArticles = d.total || 0;
+                totalPages = d.total_pages || 1;
+                currentPage = d.page || 1;
+            } catch (e) {
+                grid.innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div class="text">网络错误: ' + escHtml(e.message) + '</div></div>';
+            }
         }
 
         async function loadArticles() {
@@ -552,40 +683,28 @@
             var initFakeid = urlParams.get('fakeid') || '';
 
             try {
-                var res = await fetch('/api/rss/articles?limit=100');
-                var d = await res.json();
-
-                if (!d.success) {
-                    document.getElementById('articleGrid').innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div class="text">加载失败</div></div>';
-                    return;
+                var subRes = await fetch('/api/rss/subscriptions');
+                var subData = await subRes.json();
+                if (subData.success && subData.data) {
+                    allSources = subData.data.map(function(s) {
+                        return { fakeid: s.fakeid, nickname: s.nickname || s.fakeid };
+                    });
                 }
 
-                allArticles = d.data || [];
-
-                // Build filter tags
-                var seen = {};
-                var sources = [];
-                allArticles.forEach(function(a) {
-                    if (a.fakeid && !seen[a.fakeid]) {
-                        seen[a.fakeid] = true;
-                        sources.push({ fakeid: a.fakeid, nickname: a.nickname || a.fakeid });
-                    }
-                });
-
-                if (sources.length > 0) {
+                if (allSources.length > 0) {
                     var tagsEl = document.getElementById('filterTags');
                     var tagsHtml = '<span class="filter-tag' + (!initFakeid ? ' active' : '') + '" data-fakeid="" onclick="filterBy(this, \'\')">全部</span>';
-                    sources.forEach(function(s) {
+                    allSources.forEach(function(s) {
                         var isActive = (s.fakeid === initFakeid) ? ' active' : '';
                         tagsHtml += '<span class="filter-tag' + isActive + '" data-fakeid="' + escHtml(s.fakeid) + '" onclick="filterBy(this, \'' + escHtml(s.fakeid) + '\')">' + escHtml(s.nickname) + '</span>';
                     });
                     tagsEl.innerHTML = tagsHtml;
                 }
 
-                // Apply initial filter
                 if (initFakeid) {
                     currentFakeid = initFakeid;
                 }
+                await fetchArticles(currentFakeid, 1);
                 applyFilters();
             } catch (e) {
                 document.getElementById('articleGrid').innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div class="text">网络错误: ' + escHtml(e.message) + '</div></div>';
@@ -594,9 +713,6 @@
 
         function applyFilters() {
             var list = allArticles;
-            if (currentFakeid) {
-                list = list.filter(function(a) { return a.fakeid === currentFakeid; });
-            }
             if (showUnreadOnly) {
                 list = list.filter(function(a) { return !a.read_at; });
             }
@@ -617,9 +733,6 @@
 
         function updateUnreadCount() {
             var list = allArticles;
-            if (currentFakeid) {
-                list = list.filter(function(a) { return a.fakeid === currentFakeid; });
-            }
             var count = list.filter(function(a) { return !a.read_at; }).length;
             var el = document.getElementById('unreadCount');
             if (count > 0) {
@@ -648,12 +761,8 @@
             }
             try {
                 await fetch(url, { method: 'POST' });
-                var now = Math.floor(Date.now() / 1000);
-                allArticles.forEach(function(a) {
-                    if (!currentFakeid || a.fakeid === currentFakeid) {
-                        if (!a.read_at) a.read_at = now;
-                    }
-                });
+                // 重新加载当前页
+                await fetchArticles(currentFakeid, currentPage);
                 applyFilters();
             } catch (e) {}
         }

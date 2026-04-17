@@ -155,19 +155,24 @@ async def get_subscriptions(request: Request):
 async def get_articles_json(
     request: Request,
     fakeid: Optional[str] = Query(None, description="公众号 FakeID，不传则返回所有订阅的文章"),
-    limit: int = Query(50, ge=1, le=200, description="文章数量上限"),
+    page: int = Query(1, ge=1, description="页码，从 1 开始"),
+    page_size: int = Query(10, ge=1, le=100, description="每页文章数量"),
 ):
     """
     获取文章列表，JSON 格式，用于阅读页面渲染。
+    支持分页：传 page 和 page_size 参数。
     """
     subs = rss_store.list_subscriptions()
     nickname_map = {s["fakeid"]: s for s in subs}
     base_url = get_base_url(request)
 
     if fakeid:
-        articles = rss_store.get_articles(fakeid, limit=limit)
+        result = rss_store.get_articles_paged(fakeid, page=page, page_size=page_size)
     else:
-        articles = rss_store.get_all_articles(limit=limit)
+        result = rss_store.get_all_articles_paged(page=page, page_size=page_size)
+
+    articles = result["items"]
+    total = result["total"]
 
     items = []
     for a in articles:
@@ -188,7 +193,15 @@ async def get_articles_json(
             "read_at": a.get("read_at", 0),
         })
 
-    return {"success": True, "data": items, "total": len(items)}
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+    return {
+        "success": True,
+        "data": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    }
 
 
 @router.get("/rss/article/{article_id}", summary="获取单篇文章详情 (JSON)")
