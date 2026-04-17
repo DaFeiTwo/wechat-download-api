@@ -500,7 +500,6 @@
                     currentFakeid = initFakeid;
                 }
                 applyFilters();
-                updateUnreadCount();
             } catch (e) {
                 document.getElementById('articleGrid').innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div class="text">网络错误: ' + escHtml(e.message) + '</div></div>';
             }
@@ -515,6 +514,7 @@
                 list = list.filter(function(a) { return !a.read_at; });
             }
             renderArticles(list);
+            updateUnreadCount();
         }
 
         function toggleUnread() {
@@ -529,7 +529,11 @@
         }
 
         function updateUnreadCount() {
-            var count = allArticles.filter(function(a) { return !a.read_at; }).length;
+            var list = allArticles;
+            if (currentFakeid) {
+                list = list.filter(function(a) { return a.fakeid === currentFakeid; });
+            }
+            var count = list.filter(function(a) { return !a.read_at; }).length;
             var el = document.getElementById('unreadCount');
             if (count > 0) {
                 el.textContent = count > 99 ? '99+' : count;
