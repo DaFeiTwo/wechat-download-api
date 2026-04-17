@@ -644,8 +644,7 @@
                     detail.textContent = detailParts.join(' · ');
 
                     actions.innerHTML =
-                        '<button class="btn-sm" onclick="checkStatus()">刷新</button>' +
-                        '<button class="btn-sm btn-primary" onclick="verifyStatus()">验证登录</button>' +
+                        '<button class="btn-sm" onclick="verifyStatus()">验证登录</button>' +
                         '<button class="btn-sm btn-danger" onclick="doLogout()">退出登录</button>';
                 } else {
                     icon.className = 'status-icon offline';
@@ -654,7 +653,6 @@
                     detail.textContent = '请先扫码登录后使用 API';
 
                     actions.innerHTML =
-                        '<button class="btn-sm" onclick="checkStatus()">刷新</button>' +
                         '<a href="/login.html" class="btn-sm btn-primary" style="text-decoration:none;display:inline-block;">去登录</a>';
                 }
             } catch (e) {
