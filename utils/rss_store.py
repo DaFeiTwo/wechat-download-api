@@ -67,15 +67,6 @@ def init_db():
             ON articles(fakeid, publish_time DESC);
     """)
     conn.commit()
-    
-    # 迁移：为已有数据库补上 read_at 列
-    try:
-        conn.execute("ALTER TABLE articles ADD COLUMN read_at INTEGER NOT NULL DEFAULT 0")
-        conn.commit()
-        logger.info("Migration: added read_at column to articles table")
-    except sqlite3.OperationalError:
-        pass  # 列已存在，忽略
-    
     conn.close()
     logger.info("RSS database initialized: %s", DB_PATH)
 

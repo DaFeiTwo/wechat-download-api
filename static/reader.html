@@ -97,6 +97,28 @@
         .btn-sm:hover { border-color: var(--primary-color); color: var(--primary-color); }
         .btn-sm.active { background: var(--primary-color); color: #fff; border-color: var(--primary-color); }
 
+        /* 未读按钮角标 */
+        .btn-wrap {
+            position: relative;
+            display: inline-flex;
+        }
+
+        .btn-wrap .unread-count {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            min-width: 18px;
+            height: 18px;
+            padding: 0 5px;
+            border-radius: 9px;
+            background: var(--error-color);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 18px;
+            text-align: center;
+        }
+
         /* Filter bar */
         .filter-bar {
             background: var(--bg-primary);
@@ -326,7 +348,10 @@
                 <p>浏览订阅公众号的最新文章</p>
             </div>
             <div class="header-actions">
-                <button class="btn-sm" id="unreadBtn" onclick="toggleUnread()">筛选未读</button>
+                <span class="btn-wrap">
+                    <button class="btn-sm" id="unreadBtn" onclick="toggleUnread()">筛选未读</button>
+                    <span class="unread-count" id="unreadCount" style="display:none"></span>
+                </span>
                 <a href="/admin.html" class="btn-sm">管理面板</a>
                 <a href="/rss.html" class="btn-sm">RSS 管理</a>
             </div>
@@ -475,6 +500,7 @@
                     currentFakeid = initFakeid;
                 }
                 applyFilters();
+                updateUnreadCount();
             } catch (e) {
                 document.getElementById('articleGrid').innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div class="text">网络错误: ' + escHtml(e.message) + '</div></div>';
             }
@@ -500,6 +526,17 @@
                 btn.classList.remove('active');
             }
             applyFilters();
+        }
+
+        function updateUnreadCount() {
+            var count = allArticles.filter(function(a) { return !a.read_at; }).length;
+            var el = document.getElementById('unreadCount');
+            if (count > 0) {
+                el.textContent = count > 99 ? '99+' : count;
+                el.style.display = '';
+            } else {
+                el.style.display = 'none';
+            }
         }
 
         window.addEventListener('load', loadArticles);
