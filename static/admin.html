@@ -599,6 +599,34 @@
                     <div class="result-body" id="resultBody"></div>
                 </div>
             </div>
+
+            <!-- Download Article -->
+            <div class="card test-section">
+                <div class="card-header">
+                    <div class="card-icon green">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="card-title">下载文章</div>
+                        <div class="card-desc">输入文章 URL 下载并保存到本地</div>
+                    </div>
+                </div>
+                <div class="test-input-group">
+                    <input type="text" id="downloadUrl" placeholder="https://mp.weixin.qq.com/s/xxxxx">
+                    <button class="btn btn-primary" id="downloadBtn" onclick="downloadArticle()">下载并保存</button>
+                </div>
+                <div class="result-panel" id="downloadPanel">
+                    <div class="result-header">
+                        <span class="tag" id="downloadTag"></span>
+                        <span class="time" id="downloadTime"></span>
+                    </div>
+                    <div class="result-body" id="downloadBody"></div>
+                </div>
+            </div>
         </div>
 
         <!-- Footer -->
@@ -790,8 +818,69 @@
             btn.textContent = '获取文章';
         }
 
+        async function downloadArticle() {
+            var url = document.getElementById('downloadUrl').value.trim();
+            var panel = document.getElementById('downloadPanel');
+            var tag = document.getElementById('downloadTag');
+            var timeEl = document.getElementById('downloadTime');
+            var body = document.getElementById('downloadBody');
+            var btn = document.getElementById('downloadBtn');
+
+            if (!url) return;
+
+            panel.className = 'result-panel visible';
+            tag.className = 'tag';
+            tag.textContent = '';
+            timeEl.textContent = '';
+            body.innerHTML = '<span class="loading-spinner"></span>下载中...';
+            btn.disabled = true;
+            btn.textContent = '下载中...';
+
+            var startTime = Date.now();
+
+            try {
+                var res = await fetch('/api/article/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+                var data = await res.json();
+                var elapsed = Date.now() - startTime;
+
+                timeEl.textContent = elapsed + 'ms';
+
+                if (data.success) {
+                    tag.className = 'tag success';
+                    tag.textContent = '成功';
+                    var title = data.title || '未知标题';
+                    var articleId = data.article_id;
+                    var link = '/article.html?id=' + articleId;
+                    body.innerHTML = '<div style="line-height:2;">' +
+                        '<div><strong>文章标题：</strong>' + title + '</div>' +
+                        '<div><strong>阅读链接：</strong><a href="' + link + '" target="_blank" style="color:var(--primary-color);text-decoration:none;">' + link + '</a></div>' +
+                        (data.message ? '<div style="color:var(--text-muted);margin-top:4px;">' + data.message + '</div>' : '') +
+                        '</div>';
+                } else {
+                    tag.className = 'tag error';
+                    tag.textContent = '失败';
+                    body.textContent = data.error || '下载失败，请检查 URL 是否正确';
+                }
+            } catch (e) {
+                tag.className = 'tag error';
+                tag.textContent = '错误';
+                body.textContent = '请求失败: ' + e.message;
+            }
+
+            btn.disabled = false;
+            btn.textContent = '下载并保存';
+        }
+
         document.getElementById('testUrl').addEventListener('keydown', function (e) {
             if (e.key === 'Enter') testArticle();
+        });
+
+        document.getElementById('downloadUrl').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') downloadArticle();
         });
 
         window.addEventListener('load', checkStatus);

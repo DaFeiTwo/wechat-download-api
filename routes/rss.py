@@ -158,6 +158,7 @@ async def get_articles_json(
     page: int = Query(1, ge=1, description="页码，从 1 开始"),
     page_size: int = Query(10, ge=1, le=100, description="每页文章数量"),
     unread_only: bool = Query(False, description="是否只返回未读文章"),
+    standalone_only: bool = Query(False, description="是否只返回单篇下载文章"),
 ):
     """
     获取文章列表，JSON 格式，用于阅读页面渲染。
@@ -170,16 +171,18 @@ async def get_articles_json(
     if fakeid:
         result = rss_store.get_articles_paged(fakeid, page=page, page_size=page_size, unread_only=unread_only)
     else:
-        result = rss_store.get_all_articles_paged(page=page, page_size=page_size, unread_only=unread_only)
+        result = rss_store.get_all_articles_paged(page=page, page_size=page_size, unread_only=unread_only, standalone_only=standalone_only)
 
     articles = result["items"]
     total = result["total"]
 
     items = []
     for a in articles:
-        sub_info = nickname_map.get(a.get("fakeid", ""), {})
+        article_fakeid = a.get("fakeid", "")
+        sub_info = nickname_map.get(article_fakeid, {})
         head_img = proxy_image_url(sub_info.get("head_img", ""), base_url)
         cover = proxy_image_url(a.get("cover", ""), base_url)
+        nickname = sub_info.get("nickname", "") if article_fakeid in nickname_map else "单篇下载"
         items.append({
             "id": a.get("id", 0),
             "title": a.get("title", ""),
@@ -188,9 +191,9 @@ async def get_articles_json(
             "cover": cover,
             "author": a.get("author", ""),
             "publish_time": a.get("publish_time", 0),
-            "nickname": sub_info.get("nickname", ""),
+            "nickname": nickname,
             "head_img": head_img,
-            "fakeid": a.get("fakeid", ""),
+            "fakeid": article_fakeid,
             "read_at": a.get("read_at", 0),
         })
 
@@ -221,7 +224,7 @@ async def get_article_detail(article_id: int, request: Request):
     base_url = get_base_url(request)
     sub = rss_store.get_subscription(article.get("fakeid", ""))
     head_img = ""
-    nickname = ""
+    nickname = "单篇下载"
     if sub:
         head_img = proxy_image_url(sub.get("head_img", ""), base_url)
         nickname = sub.get("nickname", "")

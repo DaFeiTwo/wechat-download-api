@@ -32,6 +32,64 @@ def _get_conn() -> sqlite3.Connection:
     return conn
 
 
+def _migrate_remove_fk(conn: sqlite3.Connection):
+    """迁移：检测并去除 articles 表的外键约束。
+
+    SQLite 不支持 ALTER TABLE ... DROP CONSTRAINT，因此需要通过
+    重建表的方式去除外键。迁移过程在事务中执行，确保数据不丢失。
+    """
+    fk_list = conn.execute("PRAGMA foreign_key_list(articles)").fetchall()
+    if not fk_list:
+        return  # 无外键，无需迁移
+
+    logger.info("检测到 articles 表存在外键约束，开始迁移去除外键...")
+
+    # 迁移期间关闭外键检查，避免重建过程中触发约束
+    conn.execute("PRAGMA foreign_keys=OFF")
+    try:
+        conn.execute("BEGIN")
+        conn.execute("""
+            CREATE TABLE articles_new (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                fakeid        TEXT NOT NULL,
+                aid           TEXT NOT NULL DEFAULT '',
+                title         TEXT NOT NULL DEFAULT '',
+                link          TEXT NOT NULL DEFAULT '',
+                digest        TEXT NOT NULL DEFAULT '',
+                cover         TEXT NOT NULL DEFAULT '',
+                author        TEXT NOT NULL DEFAULT '',
+                content       TEXT NOT NULL DEFAULT '',
+                plain_content TEXT NOT NULL DEFAULT '',
+                publish_time  INTEGER NOT NULL DEFAULT 0,
+                fetched_at    INTEGER NOT NULL,
+                read_at       INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(fakeid, link)
+            )
+        """)
+        conn.execute("""
+            INSERT INTO articles_new
+                (id, fakeid, aid, title, link, digest, cover, author,
+                 content, plain_content, publish_time, fetched_at, read_at)
+            SELECT id, fakeid, aid, title, link, digest, cover, author,
+                   content, plain_content, publish_time, fetched_at, read_at
+            FROM articles
+        """)
+        conn.execute("DROP TABLE articles")
+        conn.execute("ALTER TABLE articles_new RENAME TO articles")
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_articles_fakeid_time
+                ON articles(fakeid, publish_time DESC)
+        """)
+        conn.commit()
+        logger.info("articles 表外键约束迁移完成")
+    except Exception:
+        conn.rollback()
+        logger.exception("articles 表外键迁移失败")
+        raise
+    finally:
+        conn.execute("PRAGMA foreign_keys=ON")
+
+
 def init_db():
     """建表（幂等）"""
     conn = _get_conn()
@@ -59,14 +117,17 @@ def init_db():
             publish_time INTEGER NOT NULL DEFAULT 0,
             fetched_at  INTEGER NOT NULL,
             read_at     INTEGER NOT NULL DEFAULT 0,
-            UNIQUE(fakeid, link),
-            FOREIGN KEY (fakeid) REFERENCES subscriptions(fakeid) ON DELETE CASCADE
+            UNIQUE(fakeid, link)
         );
 
         CREATE INDEX IF NOT EXISTS idx_articles_fakeid_time
             ON articles(fakeid, publish_time DESC);
     """)
     conn.commit()
+
+    # 对已有数据库执行迁移：去除 articles 表的外键约束
+    _migrate_remove_fk(conn)
+
     conn.close()
     logger.info("RSS database initialized: %s", DB_PATH)
 
@@ -91,6 +152,8 @@ def add_subscription(fakeid: str, nickname: str = "",
 def remove_subscription(fakeid: str) -> bool:
     conn = _get_conn()
     try:
+        # 手动删除关联文章（去除外键后不再有 ON DELETE CASCADE）
+        conn.execute("DELETE FROM articles WHERE fakeid=?", (fakeid,))
         conn.execute("DELETE FROM subscriptions WHERE fakeid=?", (fakeid,))
         conn.commit()
         return conn.total_changes > 0
@@ -249,11 +312,22 @@ def get_all_articles(limit: int = 50) -> List[Dict]:
 
 
 def get_all_articles_paged(page: int = 1, page_size: int = 10,
-                           unread_only: bool = False) -> dict:
-    """分页获取所有文章"""
+                           unread_only: bool = False,
+                           standalone_only: bool = False) -> dict:
+    """分页获取所有文章。
+
+    standalone_only=True 时只返回 fakeid 不在 subscriptions 表中的文章（单篇下载文章）。
+    """
     conn = _get_conn()
     try:
-        where = "WHERE read_at = 0" if unread_only else ""
+        conditions = []
+        if unread_only:
+            conditions.append("read_at = 0")
+        if standalone_only:
+            conditions.append(
+                "fakeid NOT IN (SELECT fakeid FROM subscriptions)"
+            )
+        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
         total = conn.execute(
             "SELECT COUNT(*) AS cnt FROM articles " + where
         ).fetchone()["cnt"]
@@ -274,6 +348,19 @@ def get_article_by_id(article_id: int) -> Optional[Dict]:
     try:
         row = conn.execute(
             "SELECT * FROM articles WHERE id=?", (article_id,)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def get_article_by_link(fakeid: str, link: str) -> Optional[Dict]:
+    """根据 fakeid 和 link 查询文章记录，用于下载前的去重检查。"""
+    conn = _get_conn()
+    try:
+        row = conn.execute(
+            "SELECT * FROM articles WHERE fakeid=? AND link=?",
+            (fakeid, link),
         ).fetchone()
         return dict(row) if row else None
     finally:

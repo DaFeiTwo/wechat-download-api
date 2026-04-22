@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 
 # 导入路由
-from routes import article, articles, search, admin, login, image, health, stats, rss
+from routes import article, article_download, articles, search, admin, login, image, health, stats, rss
 from utils.rss_store import init_db
 from utils.rss_poller import rss_poller
 
@@ -97,6 +97,7 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api", tags=["健康检查"])
 app.include_router(stats.router, prefix="/api", tags=["统计信息"])
 app.include_router(article.router, prefix="/api", tags=["文章内容"])
+app.include_router(article_download.router, prefix="/api", tags=["文章下载"])
 app.include_router(articles.router, prefix="/api/public", tags=["文章列表"])  # 必须先注册
 app.include_router(search.router, prefix="/api/public", tags=["公众号搜索"])  # 后注册
 app.include_router(admin.router, prefix="/api/admin", tags=["管理"])
