@@ -81,14 +81,25 @@ class RSSPoller:
             logger.warning("RSS poll skipped: not logged in")
             return
 
-        logger.info("RSS poll: checking %d subscriptions", len(fakeids))
+        # 获取活跃黑名单
+        blacklisted = set(rss_store.get_active_blacklist_fakeids())
+        
+        # 过滤掉黑名单中的公众号
+        active_fakeids = [f for f in fakeids if f not in blacklisted]
+        skipped = len(fakeids) - len(active_fakeids)
+        
+        if skipped > 0:
+            logger.info("RSS poll: %d subscriptions (%d blacklisted, skipped)", 
+                       len(fakeids), skipped)
+        else:
+            logger.info("RSS poll: checking %d subscriptions", len(fakeids))
 
-        for fakeid in fakeids:
+        for fakeid in active_fakeids:
             try:
                 articles = await self._fetch_article_list(fakeid, creds)
                 if articles and FETCH_FULL_CONTENT:
                     # 获取完整文章内容
-                    articles = await self._enrich_articles_content(articles)
+                    articles = await self._enrich_articles_content(fakeid, articles)
                 
                 if articles:
                     new_count = rss_store.save_articles(fakeid, articles)
@@ -172,7 +183,7 @@ class RSSPoller:
         """手动触发一次轮询"""
         await self._poll_all()
     
-    async def _enrich_articles_content(self, articles: List[Dict]) -> List[Dict]:
+    async def _enrich_articles_content(self, fakeid: str, articles: List[Dict]) -> List[Dict]:
         """
         批量获取文章完整内容（并发版）
         
@@ -228,6 +239,17 @@ class RSSPoller:
                 logger.warning("Empty HTML: %s", link[:80])
                 enriched.append(article)
                 continue
+            
+            # 检测验证码触发，记录到黑名单统计
+            if "验证" in html or "环境异常" in html:
+                sub = rss_store.get_subscription(fakeid)
+                nickname = sub.get("nickname", "") if sub else ""
+                count = rss_store.increment_verification_count(fakeid, nickname)
+                logger.warning("Verification triggered for %s (count=%d): %s", 
+                             fakeid[:8], count, link[:60])
+                enriched.append(article)
+                continue
+            
             if is_article_unavailable(html):
                 reason = get_unavailable_reason(html) or "unknown"
                 logger.warning("Article permanently unavailable (%s): %s", reason, link[:80])

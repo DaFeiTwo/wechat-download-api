@@ -586,3 +586,155 @@ def _build_aggregated_rss_xml(articles: list, nickname_map: dict,
     lines = [line for line in xml_str.split('\n') if line.strip()]
     xml_str = '\n'.join(lines[1:])
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_str
+
+
+# ── 分类 RSS feed ────────────────────────────────────────
+
+@router.get("/rss/category/{category_id}", summary="获取分类 RSS 订阅源",
+            response_class=Response)
+async def get_category_rss_feed(category_id: int, request: Request,
+                                limit: int = Query(50, ge=1, le=100,
+                                                   description="文章数量上限")):
+    """
+    获取指定分类的 RSS 2.0 订阅源（XML 格式）。
+
+    聚合该分类下所有公众号的最新文章。
+
+    **路径参数：**
+    - **category_id**: 分类 ID
+
+    **查询参数：**
+    - **limit** (可选): 返回文章数量上限，默认 50
+    """
+    category = rss_store.get_category(category_id)
+    if not category:
+        raise HTTPException(status_code=404, detail="分类不存在")
+
+    # 获取分类下的订阅
+    subscriptions = rss_store.get_subscriptions_by_category(category_id)
+    nickname_map = {s["fakeid"]: s.get("nickname", s["fakeid"]) for s in subscriptions}
+
+    # 获取文章
+    articles = rss_store.get_articles_by_category(category_id, limit=limit)
+
+    base_url = get_base_url(request)
+    xml = _build_category_rss_xml(category, articles, nickname_map, base_url)
+
+    return Response(
+        content=xml,
+        media_type="application/rss+xml; charset=utf-8",
+        headers={"Cache-Control": "public, max-age=600"},
+    )
+
+
+def _build_category_rss_xml(category: dict, articles: list, nickname_map: dict,
+                             base_url: str) -> str:
+    """Build RSS XML for a category."""
+    from xml.dom import minidom
+
+    doc = minidom.Document()
+    rss = doc.createElement("rss")
+    rss.setAttribute("version", "2.0")
+    rss.setAttribute("xmlns:atom", "http://www.w3.org/2005/Atom")
+    doc.appendChild(rss)
+
+    channel = doc.createElement("channel")
+    rss.appendChild(channel)
+
+    def add_text(parent, tag, text):
+        elem = doc.createElement(tag)
+        elem.appendChild(doc.createTextNode(str(text)))
+        parent.appendChild(elem)
+        return elem
+
+    category_name = category.get("name", "Unnamed")
+    category_desc = category.get("description", "")
+
+    add_text(channel, "title", f"WeChat RSS - {category_name}")
+    add_text(channel, "link", base_url)
+    add_text(channel, "description", category_desc or f"RSS feed for category: {category_name}")
+    add_text(channel, "language", "zh-CN")
+    add_text(channel, "lastBuildDate", _rfc822(int(time.time())))
+    add_text(channel, "generator", "WeChat Download API")
+
+    atom_link = doc.createElement("atom:link")
+    atom_link.setAttribute("href", f"{base_url}/api/rss/category/{category.get('id')}")
+    atom_link.setAttribute("rel", "self")
+    atom_link.setAttribute("type", "application/rss+xml")
+    channel.appendChild(atom_link)
+
+    for a in articles:
+        item = doc.createElement("item")
+        source_name = nickname_map.get(a.get("fakeid", ""), "")
+        title_text = a.get("title", "")
+        if source_name:
+            title_text = f"[{source_name}] {title_text}"
+
+        add_text(item, "title", title_text)
+
+        link = a.get("link", "")
+        add_text(item, "link", link)
+
+        guid = doc.createElement("guid")
+        guid.setAttribute("isPermaLink", "true")
+        guid.appendChild(doc.createTextNode(link))
+        item.appendChild(guid)
+
+        if a.get("publish_time"):
+            add_text(item, "pubDate", _rfc822(a["publish_time"]))
+
+        if a.get("author"):
+            add_text(item, "author", a["author"])
+
+        cover = proxy_image_url(a.get("cover", ""), base_url)
+        digest = html_escape(a.get("digest", "")) if a.get("digest") else ""
+        author = html_escape(a.get("author", "")) if a.get("author") else ""
+        title_escaped = html_escape(a.get("title", ""))
+        content_html = a.get("content", "")
+        html_parts = []
+
+        if content_html:
+            html_parts.append(
+                f'<div style="font-size:16px;line-height:1.8;color:#333">'
+                f'{content_html}</div>'
+            )
+            if author:
+                html_parts.append(
+                    f'<hr style="margin:24px 0;border:none;border-top:1px solid #eee" />'
+                    f'<p style="color:#888;font-size:13px;margin:0">作者: {author}</p>'
+                )
+        else:
+            if cover:
+                html_parts.append(
+                    f'<div style="margin-bottom:12px">'
+                    f'<a href="{html_escape(link)}">'
+                    f'<img src="{html_escape(cover)}" alt="{title_escaped}" '
+                    f'style="max-width:100%;height:auto;border-radius:8px" /></a></div>'
+                )
+            if digest:
+                html_parts.append(
+                    f'<p style="color:#333;font-size:15px;line-height:1.8;'
+                    f'margin:0 0 16px">{digest}</p>'
+                )
+            if author:
+                html_parts.append(
+                    f'<p style="color:#888;font-size:13px;margin:0 0 12px">'
+                    f'作者: {author}</p>'
+                )
+            html_parts.append(
+                f'<p style="margin:0"><a href="{html_escape(link)}" '
+                f'style="color:#1890ff;text-decoration:none;font-size:14px">'
+                f'阅读原文 &rarr;</a></p>'
+            )
+
+        description = doc.createElement("description")
+        cdata = doc.createCDATASection("\n".join(html_parts))
+        description.appendChild(cdata)
+        item.appendChild(description)
+
+        channel.appendChild(item)
+
+    xml_str = doc.toprettyxml(indent="  ", encoding=None)
+    lines = [line for line in xml_str.split('\n') if line.strip()]
+    xml_str = '\n'.join(lines[1:])
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_str
