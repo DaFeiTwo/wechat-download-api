@@ -252,6 +252,76 @@ def get_articles(fakeid: str, limit: int = 20) -> List[Dict]:
         conn.close()
 
 
+def get_regular_articles(fakeid: str, limit: int = 50) -> List[Dict]:
+    """
+    获取常规文章（订阅后发布的文章）
+    用于常规 RSS，避免历史文章过多导致加载缓慢
+    """
+    conn = _get_conn()
+    try:
+        # 获取订阅时间
+        sub = conn.execute(
+            "SELECT created_at FROM subscriptions WHERE fakeid=?", (fakeid,)
+        ).fetchone()
+        if not sub:
+            return []
+        
+        sub_time = sub["created_at"]
+        rows = conn.execute(
+            "SELECT * FROM articles WHERE fakeid=? AND publish_time >= ? "
+            "ORDER BY publish_time DESC LIMIT ?",
+            (fakeid, sub_time, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_historical_articles(fakeid: str, limit: int = 500, offset: int = 0) -> List[Dict]:
+    """
+    获取历史文章（订阅前发布的文章）
+    用于独立的历史 RSS，支持分页
+    """
+    conn = _get_conn()
+    try:
+        # 获取订阅时间
+        sub = conn.execute(
+            "SELECT created_at FROM subscriptions WHERE fakeid=?", (fakeid,)
+        ).fetchone()
+        if not sub:
+            return []
+        
+        sub_time = sub["created_at"]
+        rows = conn.execute(
+            "SELECT * FROM articles WHERE fakeid=? AND publish_time < ? "
+            "ORDER BY publish_time DESC LIMIT ? OFFSET ?",
+            (fakeid, sub_time, limit, offset),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def count_historical_articles(fakeid: str) -> int:
+    """统计历史文章数量"""
+    conn = _get_conn()
+    try:
+        sub = conn.execute(
+            "SELECT created_at FROM subscriptions WHERE fakeid=?", (fakeid,)
+        ).fetchone()
+        if not sub:
+            return 0
+        
+        sub_time = sub["created_at"]
+        row = conn.execute(
+            "SELECT COUNT(*) as cnt FROM articles WHERE fakeid=? AND publish_time < ?",
+            (fakeid, sub_time),
+        ).fetchone()
+        return row["cnt"] if row else 0
+    finally:
+        conn.close()
+
+
 def get_all_fakeids() -> List[str]:
     conn = _get_conn()
     try:
