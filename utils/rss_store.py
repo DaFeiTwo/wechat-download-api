@@ -137,8 +137,32 @@ def init_db():
 
         CREATE INDEX IF NOT EXISTS idx_blacklist_active
             ON fakeid_blacklist(is_active);
+
+        CREATE TABLE IF NOT EXISTS categories (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT NOT NULL UNIQUE,
+            description TEXT NOT NULL DEFAULT '',
+            color       TEXT NOT NULL DEFAULT 'blue',
+            sort_order  INTEGER NOT NULL DEFAULT 0,
+            created_at  INTEGER NOT NULL
+        );
     """)
     conn.commit()
+
+    # 迁移：subscriptions 表添加 category_id 列
+    cursor = conn.execute("PRAGMA table_info(subscriptions)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if "category_id" not in columns:
+        logger.info("Adding category_id column to subscriptions table")
+        conn.execute(
+            "ALTER TABLE subscriptions ADD COLUMN category_id INTEGER DEFAULT NULL"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_subscriptions_category "
+            "ON subscriptions(category_id)"
+        )
+        conn.commit()
+        logger.info("Added category_id column to subscriptions table")
 
     # 对已有数据库执行迁移：去除 articles 表的外键约束
     _migrate_remove_fk(conn)
@@ -194,7 +218,7 @@ def list_subscriptions() -> List[Dict]:
     conn = _get_conn()
     try:
         rows = conn.execute(
-            "SELECT s.*, "
+            "SELECT s.*, c.name AS category_name, "
             "(SELECT COUNT(*) FROM articles a WHERE a.fakeid=s.fakeid) AS article_count, "
             "(SELECT a2.title FROM articles a2 WHERE a2.fakeid=s.fakeid "
             " ORDER BY a2.publish_time DESC LIMIT 1) AS latest_title, "
@@ -202,7 +226,9 @@ def list_subscriptions() -> List[Dict]:
             " ORDER BY a2.publish_time DESC LIMIT 1) AS latest_publish_time, "
             "(SELECT a2.id FROM articles a2 WHERE a2.fakeid=s.fakeid "
             " ORDER BY a2.publish_time DESC LIMIT 1) AS latest_article_id "
-            "FROM subscriptions s ORDER BY s.created_at DESC"
+            "FROM subscriptions s "
+            "LEFT JOIN categories c ON s.category_id = c.id "
+            "ORDER BY s.created_at DESC"
         ).fetchall()
         return [dict(r) for r in rows]
     finally:
@@ -520,6 +546,156 @@ def mark_read_by_fakeid(fakeid: str) -> int:
         conn.close()
 
 
+
+
+# ── 分类管理 ─────────────────────────────────────────────
+
+def create_category(name: str, description: str = "", color: str = "blue") -> Optional[int]:
+    """创建分类，返回新分类 ID；名称重复返回 None"""
+    conn = _get_conn()
+    try:
+        row = conn.execute("SELECT MAX(sort_order) as max_order FROM categories").fetchone()
+        max_order = row["max_order"] or 0
+
+        cursor = conn.execute(
+            "INSERT INTO categories (name, description, color, sort_order, created_at) "
+            "VALUES (?,?,?,?,?)",
+            (name, description, color, max_order + 1, int(time.time())),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    except sqlite3.IntegrityError:
+        return None
+    finally:
+        conn.close()
+
+
+def update_category(category_id: int, name: str = None,
+                    description: str = None, color: str = None) -> bool:
+    """更新分类信息"""
+    conn = _get_conn()
+    try:
+        updates = []
+        params: list = []
+        if name is not None:
+            updates.append("name=?")
+            params.append(name)
+        if description is not None:
+            updates.append("description=?")
+            params.append(description)
+        if color is not None:
+            updates.append("color=?")
+            params.append(color)
+
+        if not updates:
+            return False
+
+        params.append(category_id)
+        conn.execute(
+            f"UPDATE categories SET {', '.join(updates)} WHERE id=?",
+            params,
+        )
+        conn.commit()
+        return conn.total_changes > 0
+    finally:
+        conn.close()
+
+
+def delete_category(category_id: int) -> bool:
+    """删除分类（订阅的 category_id 会因为 DEFAULT NULL 自动失效）"""
+    conn = _get_conn()
+    try:
+        # 先把该分类下的订阅解除关联
+        conn.execute(
+            "UPDATE subscriptions SET category_id=NULL WHERE category_id=?",
+            (category_id,),
+        )
+        conn.execute("DELETE FROM categories WHERE id=?", (category_id,))
+        conn.commit()
+        return conn.total_changes > 0
+    finally:
+        conn.close()
+
+
+def list_categories() -> List[Dict]:
+    """获取所有分类及其订阅数"""
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT c.*,
+                   (SELECT COUNT(*) FROM subscriptions s WHERE s.category_id=c.id)
+                   AS subscription_count
+            FROM categories c
+            ORDER BY c.sort_order, c.created_at
+        """).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_category(category_id: int) -> Optional[Dict]:
+    """获取单个分类"""
+    conn = _get_conn()
+    try:
+        row = conn.execute(
+            "SELECT * FROM categories WHERE id=?", (category_id,)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def set_subscription_category(fakeid: str, category_id: Optional[int]) -> bool:
+    """设置订阅的分类"""
+    conn = _get_conn()
+    try:
+        conn.execute(
+            "UPDATE subscriptions SET category_id=? WHERE fakeid=?",
+            (category_id, fakeid),
+        )
+        conn.commit()
+        return conn.total_changes > 0
+    finally:
+        conn.close()
+
+
+def get_subscriptions_by_category(category_id: int) -> List[Dict]:
+    """获取分类下的所有订阅"""
+    conn = _get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT s.*, "
+            "(SELECT COUNT(*) FROM articles a WHERE a.fakeid=s.fakeid) AS article_count "
+            "FROM subscriptions s WHERE s.category_id=? ORDER BY s.created_at DESC",
+            (category_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_articles_by_category(category_id: int, limit: int = 50) -> List[Dict]:
+    """获取分类下所有订阅的常规文章（source='poll'）"""
+    conn = _get_conn()
+    try:
+        subs = conn.execute(
+            "SELECT fakeid FROM subscriptions WHERE category_id=?",
+            (category_id,),
+        ).fetchall()
+        if not subs:
+            return []
+
+        fakeid_list = [s["fakeid"] for s in subs]
+        placeholders = ",".join("?" * len(fakeid_list))
+
+        rows = conn.execute(
+            f"SELECT * FROM articles WHERE fakeid IN ({placeholders}) AND source='poll' "
+            "ORDER BY publish_time DESC LIMIT ?",
+            (*fakeid_list, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 
 # ── 黑名单管理 ─────────────────────────────────────────────
