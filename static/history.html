@@ -185,14 +185,9 @@
             </div>
             <div class="form-row">
                 <label>获取数量</label>
-                <select id="countSelect">
-                    <option value="20">20 篇</option>
-                    <option value="50" selected>50 篇</option>
-                    <option value="100">100 篇</option>
-                    <option value="150">150 篇</option>
-                    <option value="200">200 篇</option>
-                </select>
-                <button class="btn btn-primary" id="fetchBtn" onclick="fetchHistory()" disabled>开始获取</button>
+                <input type="number" id="countInput" value="1" min="1" max="100" style="width:80px;" onchange="validateCount(this)" onkeyup="validateCount(this)">
+                <span style="color:#666;margin-left:8px;">篇 (1-100)</span>
+                <button class="btn btn-primary" id="fetchBtn" onclick="fetchHistory()" disabled style="margin-left:16px;">开始获取</button>
             </div>
             <div class="tip">
                 <strong>注意事项：</strong><br>
@@ -224,6 +219,13 @@
             t.classList.add('show');
             clearTimeout(t._timer);
             t._timer = setTimeout(function() { t.classList.remove('show'); }, 2000);
+        }
+
+        function validateCount(input) {
+            var val = parseInt(input.value) || 1;
+            if (val < 1) val = 1;
+            if (val > 100) val = 100;
+            input.value = val;
         }
 
         async function loadSubscriptions() {
@@ -270,7 +272,8 @@
             
             var btn = document.getElementById('fetchBtn');
             var resultBox = document.getElementById('resultBox');
-            var count = parseInt(document.getElementById('countSelect').value);
+            var countInput = document.getElementById('countInput');
+            var count = Math.min(100, Math.max(1, parseInt(countInput.value) || 1));
             
             btn.disabled = true;
             btn.textContent = '获取中...';

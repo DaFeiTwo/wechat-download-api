@@ -120,6 +120,17 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_subscriptions_category ON subscriptions(category_id);
     """)
     conn.commit()
+    
+    # 检查并添加 source 字段（用于区分轮询器文章和历史文章）
+    cursor = conn.execute("PRAGMA table_info(articles)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if "source" not in columns:
+        logger.info("Adding source column to articles table")
+        conn.execute("ALTER TABLE articles ADD COLUMN source TEXT NOT NULL DEFAULT 'poll'")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_articles_source ON articles(source)")
+        conn.commit()
+        logger.info("Added source column and index to articles table")
+    
     conn.close()
     logger.info("RSS database initialized: %s", DB_PATH)
 
@@ -191,10 +202,15 @@ def update_last_poll(fakeid: str):
 
 # ── 文章缓存 ─────────────────────────────────────────────
 
-def save_articles(fakeid: str, articles: List[Dict]) -> int:
+def save_articles(fakeid: str, articles: List[Dict], source: str = "poll") -> int:
     """
     批量保存文章，返回新增数量。
     If an article already exists but has empty content, update it with new content.
+    
+    Args:
+        fakeid: 公众号ID
+        articles: 文章列表
+        source: 文章来源标记，'poll'为轮询器拉取，'deep_fetch'为历史文章获取
     """
     conn = _get_conn()
     inserted = 0
@@ -206,8 +222,8 @@ def save_articles(fakeid: str, articles: List[Dict]) -> int:
                 cursor = conn.execute(
                     "INSERT INTO articles "
                     "(fakeid, aid, title, link, digest, cover, author, "
-                    "content, plain_content, publish_time, fetched_at) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
+                    "content, plain_content, publish_time, fetched_at, source) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) "
                     "ON CONFLICT(fakeid, link) DO UPDATE SET "
                     "content = CASE WHEN excluded.content != '' AND articles.content = '' "
                     "  THEN excluded.content ELSE articles.content END, "
@@ -227,6 +243,7 @@ def save_articles(fakeid: str, articles: List[Dict]) -> int:
                         plain_content,
                         a.get("publish_time", 0),
                         int(time.time()),
+                        source,
                     ),
                 )
                 if cursor.rowcount > 0:
@@ -254,23 +271,15 @@ def get_articles(fakeid: str, limit: int = 20) -> List[Dict]:
 
 def get_regular_articles(fakeid: str, limit: int = 50) -> List[Dict]:
     """
-    获取常规文章（订阅后发布的文章）
-    用于常规 RSS，避免历史文章过多导致加载缓慢
+    获取常规文章（轮询器拉取的文章）
+    只返回 source='poll' 的文章，不包含历史文章
     """
     conn = _get_conn()
     try:
-        # 获取订阅时间
-        sub = conn.execute(
-            "SELECT created_at FROM subscriptions WHERE fakeid=?", (fakeid,)
-        ).fetchone()
-        if not sub:
-            return []
-        
-        sub_time = sub["created_at"]
         rows = conn.execute(
-            "SELECT * FROM articles WHERE fakeid=? AND publish_time >= ? "
+            "SELECT * FROM articles WHERE fakeid=? AND source='poll' "
             "ORDER BY publish_time DESC LIMIT ?",
-            (fakeid, sub_time, limit),
+            (fakeid, limit),
         ).fetchall()
         return [dict(r) for r in rows]
     finally:
@@ -279,23 +288,15 @@ def get_regular_articles(fakeid: str, limit: int = 50) -> List[Dict]:
 
 def get_historical_articles(fakeid: str, limit: int = 500, offset: int = 0) -> List[Dict]:
     """
-    获取历史文章（订阅前发布的文章）
-    用于独立的历史 RSS，支持分页
+    获取历史文章（通过"获取历史文章"功能拉取的文章）
+    返回 source='deep_fetch' 的文章，用于独立的历史 RSS，支持分页
     """
     conn = _get_conn()
     try:
-        # 获取订阅时间
-        sub = conn.execute(
-            "SELECT created_at FROM subscriptions WHERE fakeid=?", (fakeid,)
-        ).fetchone()
-        if not sub:
-            return []
-        
-        sub_time = sub["created_at"]
         rows = conn.execute(
-            "SELECT * FROM articles WHERE fakeid=? AND publish_time < ? "
+            "SELECT * FROM articles WHERE fakeid=? AND source='deep_fetch' "
             "ORDER BY publish_time DESC LIMIT ? OFFSET ?",
-            (fakeid, sub_time, limit, offset),
+            (fakeid, limit, offset),
         ).fetchall()
         return [dict(r) for r in rows]
     finally:
@@ -303,19 +304,12 @@ def get_historical_articles(fakeid: str, limit: int = 500, offset: int = 0) -> L
 
 
 def count_historical_articles(fakeid: str) -> int:
-    """统计历史文章数量"""
+    """统计历史文章数量（source='deep_fetch'的文章）"""
     conn = _get_conn()
     try:
-        sub = conn.execute(
-            "SELECT created_at FROM subscriptions WHERE fakeid=?", (fakeid,)
-        ).fetchone()
-        if not sub:
-            return 0
-        
-        sub_time = sub["created_at"]
         row = conn.execute(
-            "SELECT COUNT(*) as cnt FROM articles WHERE fakeid=? AND publish_time < ?",
-            (fakeid, sub_time),
+            "SELECT COUNT(*) as cnt FROM articles WHERE fakeid=? AND source='deep_fetch'",
+            (fakeid,),
         ).fetchone()
         return row["cnt"] if row else 0
     finally:
@@ -332,12 +326,24 @@ def get_all_fakeids() -> List[str]:
 
 
 def get_all_articles(limit: int = 50) -> List[Dict]:
-    """Get latest articles across all subscriptions, sorted by publish_time desc."""
+    """
+    获取所有订阅的常规文章（聚合RSS）
+    只返回轮询器拉取的文章（source='poll'），不包含历史文章
+    """
     conn = _get_conn()
     try:
+        # 获取所有订阅的fakeid
+        subs = conn.execute("SELECT fakeid FROM subscriptions").fetchall()
+        if not subs:
+            return []
+        
+        fakeid_list = [s["fakeid"] for s in subs]
+        placeholders = ",".join("?" * len(fakeid_list))
+        
         rows = conn.execute(
-            "SELECT * FROM articles ORDER BY publish_time DESC LIMIT ?",
-            (limit,),
+            f"SELECT * FROM articles WHERE fakeid IN ({placeholders}) AND source='poll' "
+            "ORDER BY publish_time DESC LIMIT ?",
+            (*fakeid_list, limit),
         ).fetchall()
         return [dict(r) for r in rows]
     finally:
@@ -590,16 +596,28 @@ def get_subscriptions_by_category(category_id: int) -> List[Dict]:
 
 
 def get_articles_by_category(category_id: int, limit: int = 50) -> List[Dict]:
-    """获取分类下所有订阅的文章"""
+    """
+    获取分类下所有订阅的常规文章
+    只返回轮询器拉取的文章（source='poll'），不包含历史文章
+    """
     conn = _get_conn()
     try:
-        rows = conn.execute("""
-            SELECT a.* FROM articles a
-            JOIN subscriptions s ON a.fakeid = s.fakeid
-            WHERE s.category_id = ?
-            ORDER BY a.publish_time DESC
-            LIMIT ?
-        """, (category_id, limit)).fetchall()
+        # 获取该分类下的所有fakeid
+        subs = conn.execute(
+            "SELECT fakeid FROM subscriptions WHERE category_id=?",
+            (category_id,)
+        ).fetchall()
+        if not subs:
+            return []
+        
+        fakeid_list = [s["fakeid"] for s in subs]
+        placeholders = ",".join("?" * len(fakeid_list))
+        
+        rows = conn.execute(
+            f"SELECT * FROM articles WHERE fakeid IN ({placeholders}) AND source='poll' "
+            "ORDER BY publish_time DESC LIMIT ?",
+            (*fakeid_list, limit),
+        ).fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()

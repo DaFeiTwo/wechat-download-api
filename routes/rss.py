@@ -205,7 +205,7 @@ async def poller_status():
             response_class=Response)
 async def get_aggregated_rss_feed(
     request: Request,
-    limit: int = Query(50, ge=1, le=200, description="文章数量上限"),
+    limit: int = Query(200, ge=1, le=500, description="文章数量上限"),
 ):
     """
     获取所有订阅公众号的聚合 RSS 2.0 订阅源。
@@ -329,6 +329,7 @@ def _build_historical_rss_xml(
     rss = doc.createElement("rss")
     rss.setAttribute("version", "2.0")
     rss.setAttribute("xmlns:atom", "http://www.w3.org/2005/Atom")
+    rss.setAttribute("xmlns:content", "http://purl.org/rss/1.0/modules/content/")
     doc.appendChild(rss)
     
     channel = doc.createElement("channel")
@@ -450,6 +451,12 @@ def _build_historical_rss_xml(
         description.appendChild(cdata)
         item.appendChild(description)
         
+        # 添加 content:encoded 以兼容 Readwise Reader 等阅读器
+        content_encoded = doc.createElement("content:encoded")
+        content_cdata = doc.createCDATASection("\n".join(html_parts))
+        content_encoded.appendChild(content_cdata)
+        item.appendChild(content_encoded)
+        
         channel.appendChild(item)
     
     xml_str = doc.toprettyxml(indent="  ", encoding=None)
@@ -473,6 +480,7 @@ def _build_rss_xml(fakeid: str, sub: dict, articles: list,
     rss = doc.createElement("rss")
     rss.setAttribute("version", "2.0")
     rss.setAttribute("xmlns:atom", "http://www.w3.org/2005/Atom")
+    rss.setAttribute("xmlns:content", "http://purl.org/rss/1.0/modules/content/")
     doc.appendChild(rss)
     
     # 创建 channel
@@ -581,6 +589,12 @@ def _build_rss_xml(fakeid: str, sub: dict, articles: list,
         cdata = doc.createCDATASection("\n".join(html_parts))
         description.appendChild(cdata)
         item.appendChild(description)
+        
+        # 添加 content:encoded 以兼容 Readwise Reader 等阅读器
+        content_encoded = doc.createElement("content:encoded")
+        content_cdata = doc.createCDATASection("\n".join(html_parts))
+        content_encoded.appendChild(content_cdata)
+        item.appendChild(content_encoded)
         
         channel.appendChild(item)
     
@@ -691,6 +705,7 @@ def _build_aggregated_rss_xml(articles: list, nickname_map: dict,
     rss = doc.createElement("rss")
     rss.setAttribute("version", "2.0")
     rss.setAttribute("xmlns:atom", "http://www.w3.org/2005/Atom")
+    rss.setAttribute("xmlns:content", "http://purl.org/rss/1.0/modules/content/")
     doc.appendChild(rss)
 
     channel = doc.createElement("channel")
@@ -784,6 +799,12 @@ def _build_aggregated_rss_xml(articles: list, nickname_map: dict,
         description.appendChild(cdata)
         item.appendChild(description)
 
+        # 添加 content:encoded 以兼容 Readwise Reader 等阅读器
+        content_encoded = doc.createElement("content:encoded")
+        content_cdata = doc.createCDATASection("\n".join(html_parts))
+        content_encoded.appendChild(content_cdata)
+        item.appendChild(content_encoded)
+
         channel.appendChild(item)
 
     xml_str = doc.toprettyxml(indent="  ", encoding=None)
@@ -797,7 +818,7 @@ def _build_aggregated_rss_xml(articles: list, nickname_map: dict,
 @router.get("/rss/category/{category_id}", summary="获取分类 RSS 订阅源",
             response_class=Response)
 async def get_category_rss_feed(category_id: int, request: Request,
-                                limit: int = Query(50, ge=1, le=100,
+                                limit: int = Query(200, ge=1, le=500,
                                                    description="文章数量上限")):
     """
     获取指定分类的 RSS 2.0 订阅源（XML 格式）。
@@ -840,6 +861,7 @@ def _build_category_rss_xml(category: dict, articles: list, nickname_map: dict,
     rss = doc.createElement("rss")
     rss.setAttribute("version", "2.0")
     rss.setAttribute("xmlns:atom", "http://www.w3.org/2005/Atom")
+    rss.setAttribute("xmlns:content", "http://purl.org/rss/1.0/modules/content/")
     doc.appendChild(rss)
 
     channel = doc.createElement("channel")
@@ -935,6 +957,12 @@ def _build_category_rss_xml(category: dict, articles: list, nickname_map: dict,
         cdata = doc.createCDATASection("\n".join(html_parts))
         description.appendChild(cdata)
         item.appendChild(description)
+
+        # 添加 content:encoded 以兼容 Readwise Reader 等阅读器
+        content_encoded = doc.createElement("content:encoded")
+        content_cdata = doc.createCDATASection("\n".join(html_parts))
+        content_encoded.appendChild(content_cdata)
+        item.appendChild(content_encoded)
 
         channel.appendChild(item)
 

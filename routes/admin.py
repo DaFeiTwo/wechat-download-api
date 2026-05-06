@@ -8,6 +8,8 @@
 管理路由 - FastAPI版本
 """
 
+import time
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -247,7 +249,7 @@ async def set_subscription_category(fakeid: str, req: SetCategoryRequest):
 
 class FetchHistoryRequest(BaseModel):
     fakeid: str = Field(..., description="公众号ID")
-    count: int = Field(50, ge=10, le=200, description="获取数量，10-200篇")
+    count: int = Field(1, ge=1, le=100, description="获取数量，1-100篇")
 
 
 class FetchHistoryResponse(BaseModel):
@@ -264,7 +266,6 @@ async def fetch_history_articles(req: FetchHistoryRequest):
     简化版：直接调用微信 API 获取历史文章列表，不涉及用户权限和付费逻辑。
     """
     from utils.auth_manager import auth_manager
-    from utils.rss_poller import poller
     
     # 检查登录状态
     status = auth_manager.get_status()
@@ -312,6 +313,15 @@ async def fetch_history_articles(req: FetchHistoryRequest):
 async def _fetch_history_internal(fakeid: str, target_count: int) -> tuple:
     """
     内部历史文章获取逻辑。
+    
+    历史文章定义：订阅时间之前发布的文章（publish_time < subscription.created_at）
+    
+    流程：
+    1. 获取订阅时间和数据库中已有的历史文章数量
+    2. 从已有历史文章的位置开始翻页，避免重复获取
+    3. 只保存订阅前发布的新文章
+    4. 达到目标数量或无更多历史文章时停止
+    
     返回 (fetched_count, new_count)。
     """
     import httpx
@@ -323,11 +333,25 @@ async def _fetch_history_internal(fakeid: str, target_count: int) -> tuple:
     if not creds or not creds.get("token"):
         raise ValueError("登录凭证无效")
     
-    all_articles = []
-    batch_size = 10
-    batches_needed = (target_count + batch_size - 1) // batch_size
+    # 获取订阅时间
+    sub = rss_store.get_subscription(fakeid)
+    if not sub:
+        raise ValueError("订阅不存在")
+    sub_time = sub.get("created_at", 0)
+    if sub_time <= 0:
+        sub_time = int(time.time())
     
-    for batch_num in range(batches_needed):
+    # 获取数据库中已有的历史文章数量，从这个位置开始翻页
+    existing_historical = rss_store.count_historical_articles(fakeid)
+    
+    historical_articles = []
+    batch_size = 10
+    # 从已有历史文章位置开始（跳过已获取的）
+    start_batch = existing_historical // batch_size
+    batch_num = start_batch
+    max_batches = start_batch + 50  # 最多再翻 50 页
+    
+    while batch_num < max_batches and len(historical_articles) < target_count:
         begin = batch_num * batch_size
         
         params = {
@@ -370,12 +394,15 @@ async def _fetch_history_internal(fakeid: str, target_count: int) -> tuple:
             try:
                 publish_page = json.loads(publish_page)
             except (json.JSONDecodeError, ValueError):
+                batch_num += 1
                 continue
         
         if not isinstance(publish_page, dict):
+            batch_num += 1
             continue
         
         batch_articles = []
+        
         for item in publish_page.get("publish_list", []):
             publish_info = item.get("publish_info", {})
             if isinstance(publish_info, str):
@@ -386,30 +413,39 @@ async def _fetch_history_internal(fakeid: str, target_count: int) -> tuple:
             if not isinstance(publish_info, dict):
                 continue
             for a in publish_info.get("appmsgex", []):
-                batch_articles.append({
-                    "aid": a.get("aid", ""),
-                    "title": a.get("title", ""),
-                    "link": a.get("link", ""),
-                    "digest": a.get("digest", ""),
-                    "cover": a.get("cover", ""),
-                    "author": a.get("author", ""),
-                    "publish_time": a.get("update_time", 0),
-                })
+                publish_time = a.get("update_time", 0)
+                
+                # 只保存订阅时间之前发布的文章（历史文章）
+                if publish_time < sub_time:
+                    batch_articles.append({
+                        "aid": a.get("aid", ""),
+                        "title": a.get("title", ""),
+                        "link": a.get("link", ""),
+                        "digest": a.get("digest", ""),
+                        "cover": a.get("cover", ""),
+                        "author": a.get("author", ""),
+                        "publish_time": publish_time,
+                    })
         
-        all_articles.extend(batch_articles)
+        if batch_articles:
+            historical_articles.extend(batch_articles)
         
-        # 检查是否已获取足够数量或没有更多文章
-        if len(batch_articles) < batch_size or len(all_articles) >= target_count:
+        # 检查停止条件
+        articles_in_page = len(publish_page.get("publish_list", []))
+        if articles_in_page < batch_size:
+            # 没有更多文章了
             break
         
+        batch_num += 1
+        
         # 延迟避免频繁请求
-        if batch_num < batches_needed - 1:
+        if len(historical_articles) < target_count:
             await asyncio.sleep(random.uniform(2, 4))
     
     # 截取到目标数量
-    all_articles = all_articles[:target_count]
+    historical_articles = historical_articles[:target_count]
     
-    # 保存到数据库（使用 save_articles 批量保存）
-    new_count = rss_store.save_articles(fakeid, all_articles)
+    # 保存到数据库（去重），标记为历史文章 'deep_fetch'
+    new_count = rss_store.save_articles(fakeid, historical_articles, source='deep_fetch')
     
-    return len(all_articles), new_count
+    return len(historical_articles), new_count
