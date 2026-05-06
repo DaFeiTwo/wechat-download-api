@@ -142,10 +142,17 @@ async def get_subscriptions(request: Request):
     for s in subs:
         # 将头像 URL 转换为代理链接
         head_img = proxy_image_url(s.get("head_img", ""), base_url)
+        fakeid = s["fakeid"]
+        historical_count = rss_store.count_historical_articles(fakeid)
         items.append({
             **s,
             "head_img": head_img,
-            "rss_url": f"{base_url}/api/rss/{s['fakeid']}",
+            "rss_url": f"{base_url}/api/rss/{fakeid}",
+            "historical_rss_url": (
+                f"{base_url}/api/rss/{fakeid}/history"
+                if historical_count > 0 else ""
+            ),
+            "historical_count": historical_count,
         })
 
     return SubscriptionListResponse(success=True, data=items)
@@ -442,6 +449,149 @@ def _rfc822(ts: int) -> str:
     return dt.strftime("%a, %d %b %Y %H:%M:%S +0000")
 
 
+def _build_historical_rss_xml(
+    fakeid: str, sub: dict, articles: list, base_url: str,
+    page: int = 1, total_pages: int = 1, total_count: int = 0,
+) -> str:
+    """构建历史文章 RSS XML，包含分页信息"""
+    from xml.dom import minidom
+
+    doc = minidom.Document()
+
+    rss = doc.createElement("rss")
+    rss.setAttribute("version", "2.0")
+    rss.setAttribute("xmlns:atom", "http://www.w3.org/2005/Atom")
+    doc.appendChild(rss)
+
+    channel = doc.createElement("channel")
+    rss.appendChild(channel)
+
+    def add_text_element(parent, tag, text):
+        elem = doc.createElement(tag)
+        elem.appendChild(doc.createTextNode(str(text)))
+        parent.appendChild(elem)
+        return elem
+
+    nickname = sub.get("nickname") or fakeid
+    add_text_element(channel, "title", f"{nickname} - 历史文章")
+    add_text_element(channel, "link", "https://mp.weixin.qq.com")
+    add_text_element(
+        channel, "description",
+        f"{nickname} 的历史文章 (共 {total_count} 篇, 第 {page}/{total_pages} 页)",
+    )
+    add_text_element(channel, "language", "zh-CN")
+    add_text_element(channel, "lastBuildDate", _rfc822(int(time.time())))
+    add_text_element(channel, "generator", "WeChat Download API")
+
+    atom_link = doc.createElement("atom:link")
+    atom_link.setAttribute("href", f"{base_url}/api/rss/{fakeid}/history?page={page}")
+    atom_link.setAttribute("rel", "self")
+    atom_link.setAttribute("type", "application/rss+xml")
+    channel.appendChild(atom_link)
+
+    if page > 1:
+        prev_link = doc.createElement("atom:link")
+        prev_link.setAttribute(
+            "href", f"{base_url}/api/rss/{fakeid}/history?page={page - 1}"
+        )
+        prev_link.setAttribute("rel", "previous")
+        prev_link.setAttribute("type", "application/rss+xml")
+        channel.appendChild(prev_link)
+
+    if page < total_pages:
+        next_link = doc.createElement("atom:link")
+        next_link.setAttribute(
+            "href", f"{base_url}/api/rss/{fakeid}/history?page={page + 1}"
+        )
+        next_link.setAttribute("rel", "next")
+        next_link.setAttribute("type", "application/rss+xml")
+        channel.appendChild(next_link)
+
+    if sub.get("head_img"):
+        image = doc.createElement("image")
+        head_img_proxied = proxy_image_url(sub["head_img"], base_url)
+        add_text_element(image, "url", head_img_proxied)
+        add_text_element(image, "title", nickname)
+        add_text_element(image, "link", "https://mp.weixin.qq.com")
+        channel.appendChild(image)
+
+    for a in articles:
+        item = doc.createElement("item")
+
+        add_text_element(item, "title", a.get("title", ""))
+
+        link = a.get("link", "")
+        add_text_element(item, "link", link)
+
+        guid = doc.createElement("guid")
+        guid.setAttribute("isPermaLink", "true")
+        guid.appendChild(doc.createTextNode(link))
+        item.appendChild(guid)
+
+        if a.get("publish_time"):
+            add_text_element(item, "pubDate", _rfc822(a["publish_time"]))
+
+        if a.get("author"):
+            add_text_element(item, "author", a["author"])
+
+        cover = proxy_image_url(a.get("cover", ""), base_url)
+        digest = html_escape(a.get("digest", "")) if a.get("digest") else ""
+        author = html_escape(a.get("author", "")) if a.get("author") else ""
+        title_escaped = html_escape(a.get("title", ""))
+
+        content_html = a.get("content", "")
+        html_parts = []
+
+        if content_html:
+            html_parts.append(
+                f'<div style="font-size:16px;line-height:1.8;color:#333">'
+                f'{content_html}'
+                f'</div>'
+            )
+            if author:
+                html_parts.append(
+                    f'<hr style="margin:24px 0;border:none;border-top:1px solid #eee" />'
+                    f'<p style="color:#888;font-size:13px;margin:0">作者: {author}</p>'
+                )
+        else:
+            if cover:
+                html_parts.append(
+                    f'<div style="margin-bottom:12px">'
+                    f'<a href="{html_escape(link)}">'
+                    f'<img src="{html_escape(cover)}" alt="{title_escaped}" '
+                    f'style="max-width:100%;height:auto;border-radius:8px" />'
+                    f'</a></div>'
+                )
+            if digest:
+                html_parts.append(
+                    f'<p style="color:#333;font-size:15px;line-height:1.8;'
+                    f'margin:0 0 16px">{digest}</p>'
+                )
+            if author:
+                html_parts.append(
+                    f'<p style="color:#888;font-size:13px;margin:0 0 12px">'
+                    f'作者: {author}</p>'
+                )
+            html_parts.append(
+                f'<p style="margin:0"><a href="{html_escape(link)}" '
+                f'style="color:#1890ff;text-decoration:none;font-size:14px">'
+                f'阅读原文 &rarr;</a></p>'
+            )
+
+        description = doc.createElement("description")
+        cdata = doc.createCDATASection("\n".join(html_parts))
+        description.appendChild(cdata)
+        item.appendChild(description)
+
+        channel.appendChild(item)
+
+    xml_str = doc.toprettyxml(indent="  ", encoding=None)
+    lines = [line for line in xml_str.split('\n') if line.strip()]
+    xml_str = '\n'.join(lines[1:])
+
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_str
+
+
 def _build_rss_xml(fakeid: str, sub: dict, articles: list,
                    base_url: str) -> str:
     """
@@ -585,6 +735,9 @@ async def get_rss_feed(fakeid: str, request: Request,
     """
     获取指定公众号的 RSS 2.0 订阅源（XML 格式）。
 
+    只包含轮询器自动拉取的常规文章（订阅后发布的更新）。
+    历史文章请使用 `/api/rss/{fakeid}/history` 独立订阅。
+
     将此地址添加到任何 RSS 阅读器即可订阅公众号文章。
 
     **路径参数：**
@@ -597,7 +750,8 @@ async def get_rss_feed(fakeid: str, request: Request,
     if not sub:
         raise HTTPException(status_code=404, detail="未找到该订阅，请先添加订阅")
 
-    articles = rss_store.get_articles(fakeid, limit=limit)
+    # 只获取轮询器拉取的常规文章，历史文章走独立 RSS
+    articles = rss_store.get_regular_articles(fakeid, limit=limit)
     base_url = get_base_url(request)
     xml = _build_rss_xml(fakeid, sub, articles, base_url)
 
@@ -605,6 +759,57 @@ async def get_rss_feed(fakeid: str, request: Request,
         content=xml,
         media_type="application/rss+xml; charset=utf-8",
         headers={"Cache-Control": "public, max-age=600"},
+    )
+
+
+@router.get("/rss/{fakeid}/history", summary="获取历史文章 RSS 订阅源",
+            response_class=Response)
+async def get_historical_rss_feed(
+    fakeid: str,
+    request: Request,
+    page: int = Query(1, ge=1, description="页码"),
+    per_page: int = Query(100, ge=10, le=500, description="每页数量"),
+):
+    """
+    获取指定公众号的历史文章 RSS 2.0 订阅源（XML 格式）。
+
+    历史文章指通过"获取历史文章"功能主动拉取的订阅前老文章。
+    与常规 RSS 分离，避免大量历史文章导致主订阅源加载缓慢。
+
+    **路径参数：**
+    - **fakeid**: 公众号 FakeID
+
+    **查询参数：**
+    - **page** (可选): 页码，默认 1
+    - **per_page** (可选): 每页数量，默认 100，最大 500
+    """
+    sub = rss_store.get_subscription(fakeid)
+    if not sub:
+        raise HTTPException(status_code=404, detail="未找到该订阅，请先添加订阅")
+
+    total_count = rss_store.count_historical_articles(fakeid)
+    if total_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="该公众号暂无历史文章，请先使用「获取历史文章」功能拉取",
+        )
+
+    offset = (page - 1) * per_page
+    articles = rss_store.get_historical_articles(
+        fakeid, limit=per_page, offset=offset
+    )
+
+    total_pages = (total_count + per_page - 1) // per_page
+    base_url = get_base_url(request)
+    xml = _build_historical_rss_xml(
+        fakeid, sub, articles, base_url,
+        page=page, total_pages=total_pages, total_count=total_count,
+    )
+
+    return Response(
+        content=xml,
+        media_type="application/rss+xml; charset=utf-8",
+        headers={"Cache-Control": "public, max-age=3600"},
     )
 
 

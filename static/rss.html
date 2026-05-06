@@ -537,6 +537,9 @@
                     html += '<a href="/reader.html?fakeid=' + escAttr(s.fakeid) + '" class="btn-copy" style="text-decoration:none;" target="_blank">阅读</a>';
                     html += '<button class="btn-copy" onclick="pollOne(this,\'' + escAttr(s.fakeid) + '\')">轮询</button>';
                     html += '<button class="btn-copy" onclick="copyRss(\'' + escAttr(s.rss_url) + '\')">复制 RSS</button>';
+                    if (s.historical_count > 0) {
+                        html += '<button class="btn-copy" style="background:#fef3c7;color:#92400e;border-color:#fcd34d;" onclick="copyRss(\'' + escAttr(s.historical_rss_url) + '\')" title="历史文章 ' + s.historical_count + ' 篇">历史 RSS</button>';
+                    }
                     html += '<button class="btn-unsub" onclick="doUnsub(\'' + escAttr(s.fakeid) + '\')">取消</button>';
                     html += '</div></div></li>';
                 });

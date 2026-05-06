@@ -151,6 +151,11 @@ async def rss_page():
     """RSS 订阅管理页面"""
     return FileResponse(static_dir / "rss.html")
 
+@app.get("/history.html", include_in_schema=False)
+async def history_page():
+    """历史文章获取页面"""
+    return FileResponse(static_dir / "history.html")
+
 @app.get("/reader.html", include_in_schema=False)
 async def reader_page():
     """文章阅读页面"""
