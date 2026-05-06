@@ -119,6 +119,81 @@ async def logout():
         return {"success": False, "message": "退出登录失败"}
 
 
+# ── 黑名单管理 ─────────────────────────────────────────────
+
+class BlacklistItem(BaseModel):
+    id: int
+    fakeid: str
+    nickname: str
+    reason: str
+    verification_count: int
+    is_active: bool
+    blacklisted_at: int
+    unblacklisted_at: Optional[int]
+    note: str
+
+
+class AddBlacklistRequest(BaseModel):
+    fakeid: str = Field(..., description="公众号ID")
+    nickname: str = Field("", description="公众号名称")
+    reason: str = Field("manual", description="加入原因")
+    note: str = Field("", description="备注")
+
+
+@router.get("/blacklist", summary="获取黑名单列表")
+async def get_blacklist():
+    """获取公众号黑名单列表"""
+    blacklist = rss_store.get_blacklist()
+    return {
+        "blacklist": [
+            BlacklistItem(
+                id=bl["id"],
+                fakeid=bl["fakeid"],
+                nickname=bl["nickname"],
+                reason=bl["reason"],
+                verification_count=bl["verification_count"],
+                is_active=bool(bl["is_active"]),
+                blacklisted_at=bl["blacklisted_at"],
+                unblacklisted_at=bl["unblacklisted_at"],
+                note=bl["note"],
+            )
+            for bl in blacklist
+        ]
+    }
+
+
+@router.post("/blacklist", summary="添加到黑名单")
+async def add_to_blacklist(req: AddBlacklistRequest):
+    """手动添加公众号到黑名单"""
+    success = rss_store.add_to_blacklist(
+        fakeid=req.fakeid,
+        nickname=req.nickname,
+        reason=req.reason,
+        note=req.note or "手动添加",
+    )
+    if success:
+        return {"success": True, "message": f"已将 {req.nickname or req.fakeid} 加入黑名单"}
+    return {"success": False, "message": "添加失败"}
+
+
+@router.delete("/blacklist/{fakeid}", summary="从黑名单移除")
+async def remove_from_blacklist(fakeid: str):
+    """从黑名单移除公众号（标记为非活跃，恢复轮询）"""
+    success = rss_store.remove_from_blacklist(fakeid)
+    if success:
+        return {"success": True, "message": "已从黑名单移除"}
+    return {"success": False, "message": "移除失败，记录不存在"}
+
+
+@router.delete("/blacklist/record/{blacklist_id}", summary="永久删除黑名单记录")
+async def delete_blacklist_record(blacklist_id: int):
+    """永久删除黑名单记录（仅可删除非活跃记录）"""
+    success = rss_store.delete_blacklist_record(blacklist_id)
+    if success:
+        return {"success": True, "message": "记录已删除"}
+    return {"success": False, "message": "删除失败，记录不存在或仍在生效中"}
+
+
 # ── 历史文章获取 ─────────────────────────────────────────────
 
 
