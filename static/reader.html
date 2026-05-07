@@ -48,9 +48,17 @@
         }
 
         .layout {
-            max-width: 1080px;
+            max-width: 1280px;
             margin: 0 auto;
             padding: var(--space-xl) var(--space-lg);
+        }
+
+        /* 主体两栏 */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 220px 1fr;
+            gap: var(--space-lg);
+            align-items: start;
         }
 
         /* Header */
@@ -120,48 +128,115 @@
             cursor: pointer;
         }
 
-        /* Filter bar */
-        .filter-bar {
+        /* 竖向侧栏筛选 */
+        .filter-sidebar {
             background: var(--bg-primary);
             border: 1px solid var(--border-light);
             border-radius: var(--radius-large);
             box-shadow: var(--shadow-light);
-            padding: var(--space-md) var(--space-lg);
-            margin-bottom: var(--space-lg);
-            display: flex;
-            align-items: center;
-            gap: var(--space-sm);
-            flex-wrap: wrap;
+            padding: var(--space-md);
+            position: sticky;
+            top: var(--space-lg);
+            max-height: calc(100vh - 2 * var(--space-lg));
+            overflow-y: auto;
         }
 
-        .filter-bar .label {
+        .filter-sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-md);
+            padding: 0 var(--space-sm);
+        }
+
+        .filter-sidebar .label {
             font-size: var(--font-sm);
             color: var(--text-secondary);
             font-weight: 600;
-            flex-shrink: 0;
         }
 
-        .filter-tags {
-            display: flex;
-            gap: var(--space-sm);
-            flex-wrap: wrap;
-            flex: 1;
-        }
-
-        .filter-tag {
-            padding: 4px 14px;
-            border-radius: 20px;
+        .sort-toggle {
             font-size: var(--font-xs);
+            color: var(--text-muted);
             cursor: pointer;
-            border: 1px solid var(--border-base);
-            background: var(--bg-primary);
-            color: var(--text-secondary);
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid transparent;
             transition: all var(--duration-fast) var(--ease-in-out);
+            user-select: none;
+        }
+
+        .sort-toggle:hover { color: var(--primary-color); border-color: var(--border-light); }
+        .sort-toggle.active { color: var(--primary-color); border-color: var(--primary-color); background: rgba(24, 144, 255, 0.06); }
+
+        .filter-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .filter-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            padding: 8px 12px;
+            border-radius: var(--radius-base);
+            font-size: var(--font-sm);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all var(--duration-fast) var(--ease-in-out);
+            user-select: none;
+            border: 1px solid transparent;
+        }
+
+        .filter-item:hover { background: var(--bg-secondary); color: var(--text-primary); }
+        .filter-item.active { background: var(--primary-color); color: #fff; }
+        .filter-item.active .filter-item-count { color: rgba(255,255,255,0.85); }
+
+        .filter-item-name {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
             white-space: nowrap;
         }
 
-        .filter-tag:hover { border-color: var(--primary-color); color: var(--primary-color); }
-        .filter-tag.active { background: var(--primary-color); color: #fff; border-color: var(--primary-color); }
+        .filter-item-count {
+            font-size: 11px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        .filter-divider {
+            height: 1px;
+            background: var(--border-light);
+            margin: var(--space-sm) var(--space-sm);
+        }
+
+        /* 拖拽手柄：只在"排序中"显示 */
+        .drag-handle {
+            color: var(--border-base);
+            font-size: 14px;
+            cursor: grab;
+            flex-shrink: 0;
+            display: none;
+            user-select: none;
+        }
+
+        .filter-sidebar.sorting .filter-item.draggable .drag-handle { display: inline; }
+        .filter-sidebar.sorting .filter-item.draggable {
+            cursor: grab;
+            background: var(--bg-secondary);
+        }
+        .filter-sidebar.sorting .filter-item.draggable:active { cursor: grabbing; }
+
+        .filter-item.dragging {
+            opacity: 0.4;
+        }
+
+        .filter-item.drag-over {
+            border-top: 2px solid var(--primary-color);
+        }
 
         /* Article grid */
         .article-grid {
@@ -386,12 +461,30 @@
         @media (max-width: 768px) {
             .layout { padding: var(--space-lg) var(--space-md); }
             .header { flex-direction: column; align-items: flex-start; gap: var(--space-sm); }
+            .main-grid { grid-template-columns: 1fr; }
+            .filter-sidebar {
+                position: static;
+                max-height: 200px;
+            }
+            .filter-list {
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: var(--space-xs);
+            }
+            .filter-item {
+                padding: 4px 14px;
+                border: 1px solid var(--border-base);
+                border-radius: 20px;
+                font-size: var(--font-xs);
+            }
+            .filter-divider { display: none; }
+            .filter-item-count { display: none; }
             .article-grid { grid-template-columns: 1fr; }
             .article-cover, .article-cover-placeholder { height: 160px; }
-            .filter-bar { flex-direction: column; align-items: flex-start; }
         }
 
         @media (min-width: 769px) and (max-width: 1024px) {
+            .main-grid { grid-template-columns: 200px 1fr; }
             .article-grid { grid-template-columns: repeat(2, 1fr); }
         }
 
@@ -487,18 +580,27 @@
             </div>
         </div>
 
-        <div class="filter-bar">
-            <span class="label">筛选</span>
-            <div class="filter-tags" id="filterTags">
-                <span class="filter-tag active" data-fakeid="" onclick="filterBy(this, '')">全部</span>
+        <div class="main-grid">
+            <aside class="filter-sidebar" id="filterSidebar">
+                <div class="filter-sidebar-header">
+                    <span class="label">筛选</span>
+                    <span class="sort-toggle" id="sortToggle" onclick="toggleSortMode()" title="开启后可拖动排序">排序</span>
+                </div>
+                <div class="filter-list" id="filterList">
+                    <div class="filter-item active" data-fakeid="" onclick="filterBy(this, '')">
+                        <span class="filter-item-name">全部</span>
+                    </div>
+                </div>
+            </aside>
+
+            <div>
+                <div class="article-grid" id="articleGrid">
+                    <div class="loading-state"><span class="loading-spinner"></span>加载中...</div>
+                </div>
+
+                <div id="pagination"></div>
             </div>
         </div>
-
-        <div class="article-grid" id="articleGrid">
-            <div class="loading-state"><span class="loading-spinner"></span>加载中...</div>
-        </div>
-
-        <div id="pagination"></div>
 
         <div class="footer">
             <span>WeChat Download API v1.0.0</span>
@@ -645,6 +747,7 @@
         }
 
         async function filterBy(el, fakeid) {
+            if (sortMode) return;  // 排序模式下点击不切换筛选
             if (fakeid === '__standalone__') {
                 standaloneOnly = true;
                 currentFakeid = '';
@@ -654,7 +757,7 @@
             }
             currentPage = 1;
 
-            var tags = document.querySelectorAll('.filter-tag');
+            var tags = document.querySelectorAll('.filter-item');
             tags.forEach(function(t) { t.classList.remove('active'); });
             el.classList.add('active');
 
@@ -704,16 +807,10 @@
                     });
                 }
 
-                if (allSources.length > 0) {
-                    var tagsEl = document.getElementById('filterTags');
-                    var tagsHtml = '<span class="filter-tag' + (!initFakeid ? ' active' : '') + '" data-fakeid="" onclick="filterBy(this, \'\')">全部</span>';
-                    tagsHtml += '<span class="filter-tag" data-fakeid="__standalone__" onclick="filterBy(this, \'__standalone__\')">单篇下载</span>';
-                    allSources.forEach(function(s) {
-                        var isActive = (s.fakeid === initFakeid) ? ' active' : '';
-                        tagsHtml += '<span class="filter-tag' + isActive + '" data-fakeid="' + escHtml(s.fakeid) + '" onclick="filterBy(this, \'' + escHtml(s.fakeid) + '\')">' + escHtml(s.nickname) + '</span>';
-                    });
-                    tagsEl.innerHTML = tagsHtml;
-                }
+                // 按保存的自定义顺序排序
+                allSources = applyCustomOrder(allSources);
+
+                renderSidebar(initFakeid);
 
                 if (initFakeid) {
                     currentFakeid = initFakeid;
@@ -723,6 +820,133 @@
             } catch (e) {
                 document.getElementById('articleGrid').innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div class="text">网络错误: ' + escHtml(e.message) + '</div></div>';
             }
+        }
+
+        var ORDER_KEY = 'reader.sidebar.order.v1';
+
+        function getSavedOrder() {
+            try {
+                var raw = localStorage.getItem(ORDER_KEY);
+                return raw ? JSON.parse(raw) : [];
+            } catch (e) { return []; }
+        }
+
+        function saveOrder(fakeids) {
+            try { localStorage.setItem(ORDER_KEY, JSON.stringify(fakeids)); } catch (e) {}
+        }
+
+        function applyCustomOrder(sources) {
+            var saved = getSavedOrder();
+            if (!saved.length) return sources;
+            var map = {};
+            sources.forEach(function(s) { map[s.fakeid] = s; });
+            var ordered = [];
+            var seen = {};
+            saved.forEach(function(id) {
+                if (map[id]) { ordered.push(map[id]); seen[id] = true; }
+            });
+            // 新添加的（还没被排序过的）追加到末尾
+            sources.forEach(function(s) { if (!seen[s.fakeid]) ordered.push(s); });
+            return ordered;
+        }
+
+        function renderSidebar(initFakeid) {
+            var list = document.getElementById('filterList');
+            var html = '';
+            var all = !initFakeid && !standaloneOnly;
+            // 固定项（不可拖）
+            html += '<div class="filter-item' + (all ? ' active' : '') + '" data-fakeid="" onclick="filterBy(this, \'\')">';
+            html += '<span class="filter-item-name">全部</span></div>';
+            html += '<div class="filter-item" data-fakeid="__standalone__" onclick="filterBy(this, \'__standalone__\')">';
+            html += '<span class="filter-item-name">单篇下载</span></div>';
+
+            if (allSources.length > 0) {
+                html += '<div class="filter-divider"></div>';
+                allSources.forEach(function(s) {
+                    var isActive = (s.fakeid === initFakeid) ? ' active' : '';
+                    html += '<div class="filter-item draggable' + isActive + '" data-fakeid="' + escHtml(s.fakeid) + '" ' +
+                            'onclick="filterBy(this, \'' + escHtml(s.fakeid) + '\')">';
+                    html += '<span class="drag-handle">⋮⋮</span>';
+                    html += '<span class="filter-item-name">' + escHtml(s.nickname) + '</span>';
+                    html += '</div>';
+                });
+            }
+            list.innerHTML = html;
+            attachDragHandlers();
+        }
+
+        var sortMode = false;
+        function toggleSortMode() {
+            sortMode = !sortMode;
+            var sidebar = document.getElementById('filterSidebar');
+            var btn = document.getElementById('sortToggle');
+            if (sortMode) {
+                sidebar.classList.add('sorting');
+                btn.classList.add('active');
+                btn.textContent = '完成';
+            } else {
+                sidebar.classList.remove('sorting');
+                btn.classList.remove('active');
+                btn.textContent = '排序';
+            }
+        }
+
+        function attachDragHandlers() {
+            var items = document.querySelectorAll('.filter-item.draggable');
+            var dragged = null;
+
+            items.forEach(function(item) {
+                item.setAttribute('draggable', 'true');
+
+                item.addEventListener('dragstart', function(e) {
+                    if (!sortMode) { e.preventDefault(); return; }
+                    dragged = item;
+                    item.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+
+                item.addEventListener('dragend', function() {
+                    item.classList.remove('dragging');
+                    items.forEach(function(i) { i.classList.remove('drag-over'); });
+                    dragged = null;
+                    persistOrderFromDom();
+                });
+
+                item.addEventListener('dragover', function(e) {
+                    if (!sortMode || !dragged || dragged === item) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                });
+
+                item.addEventListener('dragenter', function(e) {
+                    if (!sortMode || !dragged || dragged === item) return;
+                    item.classList.add('drag-over');
+                });
+
+                item.addEventListener('dragleave', function() {
+                    item.classList.remove('drag-over');
+                });
+
+                item.addEventListener('drop', function(e) {
+                    if (!sortMode || !dragged || dragged === item) return;
+                    e.preventDefault();
+                    item.classList.remove('drag-over');
+                    // 插到目标前面
+                    item.parentNode.insertBefore(dragged, item);
+                });
+            });
+        }
+
+        function persistOrderFromDom() {
+            var ids = [];
+            document.querySelectorAll('.filter-item.draggable').forEach(function(i) {
+                ids.push(i.dataset.fakeid);
+            });
+            saveOrder(ids);
+            // 同步 allSources 内存顺序
+            var map = {};
+            allSources.forEach(function(s) { map[s.fakeid] = s; });
+            allSources = ids.map(function(id) { return map[id]; }).filter(Boolean);
         }
 
         function applyFilters() {
