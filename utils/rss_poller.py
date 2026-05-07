@@ -82,21 +82,20 @@ class RSSPoller:
             logger.warning("RSS poll skipped: not logged in")
             return
 
-        # 黑名单过滤暂时禁用（仍保留验证码触发计数）
-        # 如需恢复，取消下方注释即可
-        # rss_store.auto_unblacklist_expired()
-        # blacklisted = set(rss_store.get_active_blacklist_fakeids())
-        # active_fakeids = [f for f in fakeids if f not in blacklisted]
-        # skipped = len(fakeids) - len(active_fakeids)
-        # if skipped > 0:
-        #     logger.info(
-        #         "RSS poll: %d subscriptions (%d blacklisted, skipped)",
-        #         len(fakeids), skipped,
-        #     )
-        # else:
-        #     logger.info("RSS poll: checking %d subscriptions", len(fakeids))
-        active_fakeids = fakeids
-        logger.info("RSS poll: checking %d subscriptions", len(fakeids))
+        # 过滤掉黑名单中的公众号（频繁触发验证码的号）
+        # 同时自动解除超过 24 小时的黑名单
+        rss_store.auto_unblacklist_expired()
+        blacklisted = set(rss_store.get_active_blacklist_fakeids())
+        active_fakeids = [f for f in fakeids if f not in blacklisted]
+        skipped = len(fakeids) - len(active_fakeids)
+
+        if skipped > 0:
+            logger.info(
+                "RSS poll: %d subscriptions (%d blacklisted, skipped)",
+                len(fakeids), skipped,
+            )
+        else:
+            logger.info("RSS poll: checking %d subscriptions", len(fakeids))
 
         for fakeid in active_fakeids:
             try:
