@@ -82,27 +82,14 @@ class RSSPoller:
             logger.warning("RSS poll skipped: not logged in")
             return
 
-        # 过滤掉黑名单中的公众号（频繁触发验证码的号）
-        # 同时自动解除超过 24 小时的黑名单
-        rss_store.auto_unblacklist_expired()
-        blacklisted = set(rss_store.get_active_blacklist_fakeids())
-        active_fakeids = [f for f in fakeids if f not in blacklisted]
-        skipped = len(fakeids) - len(active_fakeids)
+        logger.info("RSS poll: checking %d subscriptions", len(fakeids))
 
-        if skipped > 0:
-            logger.info(
-                "RSS poll: %d subscriptions (%d blacklisted, skipped)",
-                len(fakeids), skipped,
-            )
-        else:
-            logger.info("RSS poll: checking %d subscriptions", len(fakeids))
-
-        for fakeid in active_fakeids:
+        for fakeid in fakeids:
             try:
                 articles = await self._fetch_article_list(fakeid, creds)
                 if articles and FETCH_FULL_CONTENT:
                     # 获取完整文章内容
-                    articles = await self._enrich_articles_content(fakeid, articles)
+                    articles = await self._enrich_articles_content(articles)
                 
                 if articles:
                     new_count = rss_store.save_articles(fakeid, articles)
@@ -205,7 +192,7 @@ class RSSPoller:
         try:
             articles = await self._fetch_article_list(fakeid, creds)
             if articles and FETCH_FULL_CONTENT:
-                articles = await self._enrich_articles_content(fakeid, articles)
+                articles = await self._enrich_articles_content(articles)
 
             new_count = 0
             if articles:
@@ -222,14 +209,13 @@ class RSSPoller:
             logger.error("RSS poll_one error for %s: %s", fakeid[:8], e)
             return {"success": False, "message": f"轮询出错: {str(e)}"}
     
-    async def _enrich_articles_content(self, fakeid: str, articles: List[Dict]) -> List[Dict]:
+    async def _enrich_articles_content(self, articles: List[Dict]) -> List[Dict]:
         """
         批量获取文章完整内容（并发版）
         
         限制：最多获取 20 篇文章的完整内容（避免大量文章导致轮询过久）
         
         Args:
-            fakeid: 公众号 ID，用于触发验证码时记录黑名单
             articles: 文章列表（包含基本信息）
             
         Returns:
@@ -279,19 +265,6 @@ class RSSPoller:
                 logger.warning("Empty HTML: %s", link[:80])
                 enriched.append(article)
                 continue
-
-            # 检测验证码触发，记录到黑名单统计
-            if "验证" in html or "环境异常" in html:
-                sub = rss_store.get_subscription(fakeid)
-                nickname = sub.get("nickname", "") if sub else ""
-                count = rss_store.increment_verification_count(fakeid, nickname)
-                logger.warning(
-                    "Verification triggered for %s (count=%d): %s",
-                    fakeid[:8], count, link[:60],
-                )
-                enriched.append(article)
-                continue
-
             if is_article_unavailable(html):
                 reason = get_unavailable_reason(html) or "unknown"
                 logger.warning("Article permanently unavailable (%s): %s", reason, link[:80])

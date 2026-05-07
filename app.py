@@ -156,11 +156,6 @@ async def history_page():
     """历史文章获取页面"""
     return FileResponse(static_dir / "history.html")
 
-@app.get("/blacklist.html", include_in_schema=False)
-async def blacklist_page():
-    """黑名单管理页面"""
-    return FileResponse(static_dir / "blacklist.html")
-
 @app.get("/reader.html", include_in_schema=False)
 async def reader_page():
     """文章阅读页面"""
