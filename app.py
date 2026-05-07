@@ -161,11 +161,6 @@ async def blacklist_page():
     """黑名单管理页面"""
     return FileResponse(static_dir / "blacklist.html")
 
-@app.get("/categories.html", include_in_schema=False)
-async def categories_page():
-    """分类管理页面"""
-    return FileResponse(static_dir / "categories.html")
-
 @app.get("/reader.html", include_in_schema=False)
 async def reader_page():
     """文章阅读页面"""

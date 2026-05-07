@@ -534,13 +534,6 @@
                     }
                     html += '</div></div>';
                     html += '<div class="sub-item-actions">';
-                    html += '<select style="padding:4px 8px;border-radius:4px;font-size:12px;border:1px solid var(--border-base);cursor:pointer;" onchange="setCategory(\'' + escAttr(s.fakeid) + '\', this.value)">';
-                    html += '<option value="">分类</option>';
-                    categoriesCache.forEach(function(cat) {
-                        var sel = s.category_id === cat.id ? ' selected' : '';
-                        html += '<option value="' + cat.id + '"' + sel + '>' + escHtml(cat.name) + '</option>';
-                    });
-                    html += '</select>';
                     html += '<a href="/reader.html?fakeid=' + escAttr(s.fakeid) + '" class="btn-copy" style="text-decoration:none;" target="_blank">阅读</a>';
                     html += '<button class="btn-copy" onclick="pollOne(this,\'' + escAttr(s.fakeid) + '\')">轮询</button>';
                     html += '<button class="btn-copy" onclick="copyRss(\'' + escAttr(s.rss_url) + '\')">复制 RSS</button>';
@@ -731,38 +724,10 @@
             if (e.key === 'Enter') doSearch();
         });
 
-        window.addEventListener('load', async function() {
+        window.addEventListener('load', function() {
             loadStatus();
-            await loadCategories();
             loadSubscriptions();
         });
-
-        var categoriesCache = [];
-
-        async function loadCategories() {
-            try {
-                var res = await fetch('/api/admin/categories');
-                var d = await res.json();
-                categoriesCache = d.categories || [];
-            } catch (e) {
-                categoriesCache = [];
-            }
-        }
-
-        async function setCategory(fakeid, categoryId) {
-            try {
-                var res = await fetch('/api/admin/subscriptions/' + encodeURIComponent(fakeid) + '/category', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ category_id: categoryId ? parseInt(categoryId) : null })
-                });
-                var d = await res.json();
-                showToast(d.message || (d.success ? '分类已更新' : '操作失败'));
-                loadSubscriptions();
-            } catch (e) {
-                showToast('网络错误: ' + e.message);
-            }
-        }
     </script>
 </body>
 </html>

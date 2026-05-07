@@ -361,48 +361,6 @@ async def get_aggregated_rss_feed(
     )
 
 
-# ── 分类 RSS ─────────────────────────────────────────────
-
-@router.get("/rss/category/{category_id}", summary="获取分类 RSS 订阅源",
-            response_class=Response)
-async def get_category_rss_feed(
-    category_id: int,
-    request: Request,
-    limit: int = Query(50, ge=1, le=500, description="文章数量上限"),
-):
-    """
-    获取指定分类的 RSS 2.0 订阅源（XML 格式）。
-
-    聚合该分类下所有公众号的最新文章。
-
-    **路径参数：**
-    - **category_id**: 分类 ID
-
-    **查询参数：**
-    - **limit** (可选): 返回文章数量上限，默认 50
-    """
-    category = rss_store.get_category(category_id)
-    if not category:
-        raise HTTPException(status_code=404, detail="分类不存在")
-
-    subscriptions = rss_store.get_subscriptions_by_category(category_id)
-    nickname_map = {s["fakeid"]: s.get("nickname", s["fakeid"]) for s in subscriptions}
-
-    articles = rss_store.get_articles_by_category(category_id, limit=limit)
-
-    base_url = get_base_url(request)
-    xml = _build_aggregated_rss_xml(articles, nickname_map, base_url,
-                                     title=f"WeChat RSS - {category['name']}",
-                                     description=category.get("description") or f"RSS feed for category: {category['name']}",
-                                     self_url=f"{base_url}/api/rss/category/{category_id}")
-
-    return Response(
-        content=xml,
-        media_type="application/rss+xml; charset=utf-8",
-        headers={"Cache-Control": "public, max-age=600"},
-    )
-
-
 # ── 导出 ─────────────────────────────────────────────────
 
 @router.get("/rss/export", summary="导出订阅列表")
@@ -858,10 +816,8 @@ async def get_historical_rss_feed(
 # ── 聚合 RSS XML 构建 ────────────────────────────────────
 
 def _build_aggregated_rss_xml(articles: list, nickname_map: dict,
-                               base_url: str, title: str = None,
-                               description: str = None,
-                               self_url: str = None) -> str:
-    """Build aggregated RSS XML across all subscriptions (or a category)."""
+                               base_url: str) -> str:
+    """Build aggregated RSS XML across all subscriptions."""
     from xml.dom import minidom
 
     doc = minidom.Document()
@@ -879,15 +835,15 @@ def _build_aggregated_rss_xml(articles: list, nickname_map: dict,
         parent.appendChild(elem)
         return elem
 
-    add_text(channel, "title", title or "WeChat RSS - All Subscriptions")
+    add_text(channel, "title", "WeChat RSS - All Subscriptions")
     add_text(channel, "link", base_url)
-    add_text(channel, "description", description or "Aggregated feed of all subscribed WeChat accounts")
+    add_text(channel, "description", "Aggregated feed of all subscribed WeChat accounts")
     add_text(channel, "language", "zh-CN")
     add_text(channel, "lastBuildDate", _rfc822(int(time.time())))
     add_text(channel, "generator", "WeChat Download API")
 
     atom_link = doc.createElement("atom:link")
-    atom_link.setAttribute("href", self_url or f"{base_url}/api/rss/all")
+    atom_link.setAttribute("href", f"{base_url}/api/rss/all")
     atom_link.setAttribute("rel", "self")
     atom_link.setAttribute("type", "application/rss+xml")
     channel.appendChild(atom_link)
