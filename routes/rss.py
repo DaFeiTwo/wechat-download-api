@@ -503,7 +503,6 @@ def _build_historical_rss_xml(
     rss = doc.createElement("rss")
     rss.setAttribute("version", "2.0")
     rss.setAttribute("xmlns:atom", "http://www.w3.org/2005/Atom")
-    rss.setAttribute("xmlns:content", "http://purl.org/rss/1.0/modules/content/")
     doc.appendChild(rss)
 
     channel = doc.createElement("channel")
@@ -626,11 +625,6 @@ def _build_historical_rss_xml(
         description.appendChild(cdata)
         item.appendChild(description)
 
-        # content:encoded 兼容 Readwise Reader 等阅读器
-        content_encoded = doc.createElement("content:encoded")
-        content_encoded.appendChild(doc.createCDATASection("\n".join(html_parts)))
-        item.appendChild(content_encoded)
-
         channel.appendChild(item)
 
     xml_str = doc.toprettyxml(indent="  ", encoding=None)
@@ -654,7 +648,6 @@ def _build_rss_xml(fakeid: str, sub: dict, articles: list,
     rss = doc.createElement("rss")
     rss.setAttribute("version", "2.0")
     rss.setAttribute("xmlns:atom", "http://www.w3.org/2005/Atom")
-    rss.setAttribute("xmlns:content", "http://purl.org/rss/1.0/modules/content/")
     doc.appendChild(rss)
     
     # 创建 channel
@@ -763,11 +756,6 @@ def _build_rss_xml(fakeid: str, sub: dict, articles: list,
         cdata = doc.createCDATASection("\n".join(html_parts))
         description.appendChild(cdata)
         item.appendChild(description)
-
-        # content:encoded 兼容 Readwise Reader 等阅读器
-        content_encoded = doc.createElement("content:encoded")
-        content_encoded.appendChild(doc.createCDATASection("\n".join(html_parts)))
-        item.appendChild(content_encoded)
         
         channel.appendChild(item)
     
@@ -880,7 +868,6 @@ def _build_aggregated_rss_xml(articles: list, nickname_map: dict,
     rss = doc.createElement("rss")
     rss.setAttribute("version", "2.0")
     rss.setAttribute("xmlns:atom", "http://www.w3.org/2005/Atom")
-    rss.setAttribute("xmlns:content", "http://purl.org/rss/1.0/modules/content/")
     doc.appendChild(rss)
 
     channel = doc.createElement("channel")
@@ -973,11 +960,6 @@ def _build_aggregated_rss_xml(articles: list, nickname_map: dict,
         cdata = doc.createCDATASection("\n".join(html_parts))
         description.appendChild(cdata)
         item.appendChild(description)
-
-        # content:encoded 兼容 Readwise Reader 等阅读器
-        content_encoded = doc.createElement("content:encoded")
-        content_encoded.appendChild(doc.createCDATASection("\n".join(html_parts)))
-        item.appendChild(content_encoded)
 
         channel.appendChild(item)
 
