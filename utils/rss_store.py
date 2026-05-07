@@ -128,6 +128,21 @@ def init_db():
     # 对已有数据库执行迁移：去除 articles 表的外键约束
     _migrate_remove_fk(conn)
 
+    # 迁移：subscriptions 表添加 sort_order 字段（用于阅读器侧栏自定义排序）
+    cursor = conn.execute("PRAGMA table_info(subscriptions)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if "sort_order" not in columns:
+        logger.info("Adding sort_order column to subscriptions table")
+        conn.execute(
+            "ALTER TABLE subscriptions ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_subscriptions_sort_order "
+            "ON subscriptions(sort_order)"
+        )
+        conn.commit()
+        logger.info("Added sort_order column to subscriptions table")
+
     conn.close()
     logger.info("RSS database initialized: %s", DB_PATH)
 
@@ -138,10 +153,17 @@ def add_subscription(fakeid: str, nickname: str = "",
                      alias: str = "", head_img: str = "") -> bool:
     conn = _get_conn()
     try:
+        # 新订阅排在最前：sort_order = 当前最小值 - 10（没数据时用 -10）
+        row = conn.execute(
+            "SELECT MIN(sort_order) AS min_order FROM subscriptions"
+        ).fetchone()
+        min_order = row["min_order"] if row and row["min_order"] is not None else 0
+        new_sort_order = min_order - 10
         conn.execute(
             "INSERT OR IGNORE INTO subscriptions "
-            "(fakeid, nickname, alias, head_img, created_at) VALUES (?,?,?,?,?)",
-            (fakeid, nickname, alias, head_img, int(time.time())),
+            "(fakeid, nickname, alias, head_img, created_at, sort_order) "
+            "VALUES (?,?,?,?,?,?)",
+            (fakeid, nickname, alias, head_img, int(time.time()), new_sort_order),
         )
         conn.commit()
         return conn.total_changes > 0
@@ -173,7 +195,7 @@ def list_subscriptions() -> List[Dict]:
             " ORDER BY a2.publish_time DESC LIMIT 1) AS latest_publish_time, "
             "(SELECT a2.id FROM articles a2 WHERE a2.fakeid=s.fakeid "
             " ORDER BY a2.publish_time DESC LIMIT 1) AS latest_article_id "
-            "FROM subscriptions s ORDER BY s.created_at DESC"
+            "FROM subscriptions s ORDER BY s.sort_order ASC, s.created_at DESC"
         ).fetchall()
         return [dict(r) for r in rows]
     finally:
@@ -433,3 +455,33 @@ def mark_read_by_fakeid(fakeid: str) -> int:
         conn.close()
 
 
+
+
+def reorder_subscriptions(fakeids: List[str]) -> int:
+    """
+    根据给定的 fakeid 列表顺序更新 sort_order。
+    列表中第 0 位得到 sort_order=10，第 1 位 20，以此类推。
+    不在列表中的订阅保持原值（排到后面）。
+
+    返回更新的记录数。
+    """
+    if not fakeids:
+        return 0
+    conn = _get_conn()
+    try:
+        conn.execute("BEGIN")
+        updated = 0
+        for idx, fakeid in enumerate(fakeids):
+            cursor = conn.execute(
+                "UPDATE subscriptions SET sort_order=? WHERE fakeid=?",
+                ((idx + 1) * 10, fakeid),
+            )
+            if cursor.rowcount > 0:
+                updated += 1
+        conn.commit()
+        return updated
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()

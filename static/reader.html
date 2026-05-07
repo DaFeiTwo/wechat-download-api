@@ -836,18 +836,20 @@
         }
 
         function applyCustomOrder(sources) {
+            // 后端 list_subscriptions 已经按 sort_order 返回，这里通常不需要再调整。
+            // localStorage 仅作为后端未保存过排序时的降级兜底（比如老版本升级的过渡期）。
             var saved = getSavedOrder();
             if (!saved.length) return sources;
-            var map = {};
-            sources.forEach(function(s) { map[s.fakeid] = s; });
-            var ordered = [];
-            var seen = {};
-            saved.forEach(function(id) {
-                if (map[id]) { ordered.push(map[id]); seen[id] = true; }
-            });
-            // 新添加的（还没被排序过的）追加到末尾
-            sources.forEach(function(s) { if (!seen[s.fakeid]) ordered.push(s); });
-            return ordered;
+
+            // 如果后端返回的顺序和 localStorage 一致，说明已同步，直接用后端的
+            var backendOrder = sources.map(function(s) { return s.fakeid; }).join(',');
+            var localOrder = saved.join(',');
+            if (backendOrder === localOrder) return sources;
+
+            // 不一致时也优先用后端顺序（多设备场景，其他设备可能改过）
+            // 只在后端顺序看起来是"未排序状态"（所有项按原顺序）时，才应用 localStorage
+            // 这里简单策略：直接返回后端顺序
+            return sources;
         }
 
         function renderSidebar(initFakeid) {
@@ -942,11 +944,20 @@
             document.querySelectorAll('.filter-item.draggable').forEach(function(i) {
                 ids.push(i.dataset.fakeid);
             });
+            // 1. 先写 localStorage 作为降级兜底
             saveOrder(ids);
-            // 同步 allSources 内存顺序
+            // 2. 同步 allSources 内存顺序
             var map = {};
             allSources.forEach(function(s) { map[s.fakeid] = s; });
             allSources = ids.map(function(id) { return map[id]; }).filter(Boolean);
+            // 3. 调后端 API 持久化（跨设备同步）
+            fetch('/api/rss/subscriptions/reorder', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fakeids: ids })
+            }).catch(function() {
+                // 网络失败就用 localStorage 的数据，下次刷新本机仍然保留
+            });
         }
 
         function applyFilters() {

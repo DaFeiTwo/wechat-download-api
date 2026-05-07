@@ -84,6 +84,10 @@ class PollerStatusResponse(BaseModel):
     data: dict = {}
 
 
+class ReorderRequest(BaseModel):
+    fakeids: list = Field(..., description="按期望顺序排列的 fakeid 列表")
+
+
 # ── 订阅管理 ─────────────────────────────────────────────
 
 @router.post("/rss/subscribe", response_model=SubscribeResponse, summary="添加 RSS 订阅")
@@ -149,6 +153,24 @@ async def get_subscriptions(request: Request):
         })
 
     return SubscriptionListResponse(success=True, data=items)
+
+
+@router.put("/rss/subscriptions/reorder", summary="更新订阅排序")
+async def reorder_subscriptions(req: ReorderRequest):
+    """
+    根据给定的 fakeid 列表顺序更新订阅的 sort_order。
+
+    列表中第 0 位得到 sort_order=10，第 1 位 20，以此类推。
+    不在列表中的订阅保持原有 sort_order，按原顺序排到后面。
+
+    用于阅读器侧栏的拖拽排序，实现跨设备同步。
+    """
+    updated = rss_store.reorder_subscriptions(req.fakeids)
+    return {
+        "success": True,
+        "updated": updated,
+        "message": f"已更新 {updated} 个订阅的排序",
+    }
 
 
 @router.get("/rss/articles", summary="获取文章列表 (JSON)")
