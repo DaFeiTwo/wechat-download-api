@@ -217,6 +217,8 @@ async def get_articles_json(
             "head_img": head_img,
             "fakeid": article_fakeid,
             "read_at": a.get("read_at", 0),
+            "is_favorite": bool(a.get("is_favorite", 0)),
+            "is_watchlist": bool(a.get("is_watchlist", 0)),
         })
 
     total_pages = (total + page_size - 1) // page_size if total > 0 else 1

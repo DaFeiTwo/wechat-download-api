@@ -143,6 +143,40 @@ def init_db():
         conn.commit()
         logger.info("Added sort_order column to subscriptions table")
 
+    # 文章标记（收藏 / 待看）— 两张独立表，主键即 article_id
+    # 与现有 subscriptions / articles Schema 解耦，幂等建表/建索引/建触发器
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS article_favorites (
+            article_id INTEGER PRIMARY KEY,
+            created_at INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_article_favorites_created
+            ON article_favorites(created_at DESC);
+
+        CREATE TABLE IF NOT EXISTS article_watchlist (
+            article_id INTEGER PRIMARY KEY,
+            created_at INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_article_watchlist_created
+            ON article_watchlist(created_at DESC);
+
+        -- 级联清理：文章删除时同步清理标记，避免悬空数据
+        CREATE TRIGGER IF NOT EXISTS trg_cleanup_favorites_on_article_delete
+        AFTER DELETE ON articles
+        BEGIN
+            DELETE FROM article_favorites WHERE article_id = OLD.id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS trg_cleanup_watchlist_on_article_delete
+        AFTER DELETE ON articles
+        BEGIN
+            DELETE FROM article_watchlist WHERE article_id = OLD.id;
+        END;
+    """)
+    conn.commit()
+
     conn.close()
     logger.info("RSS database initialized: %s", DB_PATH)
 
@@ -293,17 +327,23 @@ def get_articles_paged(fakeid: str, page: int = 1, page_size: int = 10,
     """分页获取指定公众号的文章"""
     conn = _get_conn()
     try:
-        where = "WHERE fakeid=?"
+        where = "WHERE articles.fakeid=?"
         params = [fakeid]
         if unread_only:
-            where += " AND read_at = 0"
+            where += " AND articles.read_at = 0"
         total = conn.execute(
             "SELECT COUNT(*) AS cnt FROM articles " + where, params
         ).fetchone()["cnt"]
         offset = (page - 1) * page_size
         rows = conn.execute(
-            "SELECT * FROM articles " + where +
-            " ORDER BY publish_time DESC LIMIT ? OFFSET ?",
+            "SELECT articles.*, "
+            "(af.article_id IS NOT NULL) AS is_favorite, "
+            "(aw.article_id IS NOT NULL) AS is_watchlist "
+            "FROM articles "
+            "LEFT JOIN article_favorites af ON af.article_id = articles.id "
+            "LEFT JOIN article_watchlist aw ON aw.article_id = articles.id "
+            + where +
+            " ORDER BY articles.publish_time DESC LIMIT ? OFFSET ?",
             params + [page_size, offset],
         ).fetchall()
         return {"items": [dict(r) for r in rows], "total": total}
@@ -344,10 +384,10 @@ def get_all_articles_paged(page: int = 1, page_size: int = 10,
     try:
         conditions = []
         if unread_only:
-            conditions.append("read_at = 0")
+            conditions.append("articles.read_at = 0")
         if standalone_only:
             conditions.append(
-                "fakeid NOT IN (SELECT fakeid FROM subscriptions)"
+                "articles.fakeid NOT IN (SELECT fakeid FROM subscriptions)"
             )
         where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
         total = conn.execute(
@@ -355,8 +395,14 @@ def get_all_articles_paged(page: int = 1, page_size: int = 10,
         ).fetchone()["cnt"]
         offset = (page - 1) * page_size
         rows = conn.execute(
-            "SELECT * FROM articles " + where +
-            " ORDER BY publish_time DESC LIMIT ? OFFSET ?",
+            "SELECT articles.*, "
+            "(af.article_id IS NOT NULL) AS is_favorite, "
+            "(aw.article_id IS NOT NULL) AS is_watchlist "
+            "FROM articles "
+            "LEFT JOIN article_favorites af ON af.article_id = articles.id "
+            "LEFT JOIN article_watchlist aw ON aw.article_id = articles.id "
+            + where +
+            " ORDER BY articles.publish_time DESC LIMIT ? OFFSET ?",
             (page_size, offset),
         ).fetchall()
         return {"items": [dict(r) for r in rows], "total": total}
@@ -483,5 +529,191 @@ def reorder_subscriptions(fakeids: List[str]) -> int:
     except Exception:
         conn.rollback()
         raise
+    finally:
+        conn.close()
+
+
+# ── 文章标记（收藏 / 待看） ─────────────────────────────
+
+def article_exists(article_id: int) -> bool:
+    """检查文章是否存在于 articles 表中（用于 Mark_API 的 404 前置校验）。"""
+    conn = _get_conn()
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM articles WHERE id=? LIMIT 1",
+            (article_id,),
+        ).fetchone()
+        return row is not None
+    finally:
+        conn.close()
+
+
+def get_marks(article_id: int) -> Dict[str, bool]:
+    """查询指定文章的收藏 / 待看标记状态。
+
+    在同一连接内执行两条独立 SELECT，返回
+    ``{"favorite": bool, "watchlist": bool}``。
+    """
+    conn = _get_conn()
+    try:
+        fav_row = conn.execute(
+            "SELECT 1 FROM article_favorites WHERE article_id=? LIMIT 1",
+            (article_id,),
+        ).fetchone()
+        watch_row = conn.execute(
+            "SELECT 1 FROM article_watchlist WHERE article_id=? LIMIT 1",
+            (article_id,),
+        ).fetchone()
+        return {
+            "favorite": fav_row is not None,
+            "watchlist": watch_row is not None,
+        }
+    finally:
+        conn.close()
+
+
+def set_favorite(article_id: int, value: bool) -> None:
+    """设置 / 取消某篇文章的收藏标记。
+
+    - ``value=True``  → ``INSERT OR IGNORE``，幂等地写入一条记录；
+      已存在时不更新 ``created_at``。
+    - ``value=False`` → ``DELETE``，幂等地清除；记录不存在时静默返回。
+
+    写操作为单条 SQL，SQLite 天然原子。
+    """
+    conn = _get_conn()
+    try:
+        if value:
+            conn.execute(
+                "INSERT OR IGNORE INTO article_favorites"
+                " (article_id, created_at) VALUES (?, ?)",
+                (article_id, int(time.time())),
+            )
+        else:
+            conn.execute(
+                "DELETE FROM article_favorites WHERE article_id=?",
+                (article_id,),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def set_watchlist(article_id: int, value: bool) -> None:
+    """设置 / 取消某篇文章的待看标记。
+
+    语义与 :func:`set_favorite` 对称，作用于 ``article_watchlist`` 表。
+    """
+    conn = _get_conn()
+    try:
+        if value:
+            conn.execute(
+                "INSERT OR IGNORE INTO article_watchlist"
+                " (article_id, created_at) VALUES (?, ?)",
+                (article_id, int(time.time())),
+            )
+        else:
+            conn.execute(
+                "DELETE FROM article_watchlist WHERE article_id=?",
+                (article_id,),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def list_favorites_paged(page: int, page_size: int) -> Dict:
+    """分页列出已收藏文章，按最近一次标记时间倒序（``af.created_at DESC``）。
+
+    SQL 以 ``article_favorites`` 为主，``JOIN articles`` 获取文章字段，
+    ``LEFT JOIN subscriptions`` 补齐 ``nickname`` / ``head_img``，
+    ``LEFT JOIN article_watchlist`` 取 ``is_watchlist`` 的实际值。
+
+    返回 ``{"items": [...], "total": N}``。每个 item 的字段集合与
+    ``get_all_articles_paged`` 的 item 一致（``articles`` 表全部列，
+    含 ``read_at`` 等），并额外携带 ``nickname`` / ``head_img`` /
+    ``is_favorite=True`` / ``is_watchlist=<实际值>``。
+    """
+    conn = _get_conn()
+    try:
+        total_row = conn.execute(
+            "SELECT COUNT(*) AS cnt "
+            "FROM article_favorites af "
+            "JOIN articles a ON a.id = af.article_id"
+        ).fetchone()
+        total = total_row["cnt"] if total_row else 0
+        offset = (page - 1) * page_size
+        rows = conn.execute(
+            "SELECT a.*, "
+            "       s.nickname AS nickname, "
+            "       s.head_img AS head_img, "
+            "       1 AS is_favorite, "
+            "       (aw.article_id IS NOT NULL) AS is_watchlist "
+            "FROM article_favorites af "
+            "JOIN articles a ON a.id = af.article_id "
+            "LEFT JOIN subscriptions s ON s.fakeid = a.fakeid "
+            "LEFT JOIN article_watchlist aw ON aw.article_id = af.article_id "
+            "ORDER BY af.created_at DESC "
+            "LIMIT ? OFFSET ?",
+            (page_size, offset),
+        ).fetchall()
+        items = []
+        for r in rows:
+            d = dict(r)
+            # NULL 归一化：subscription 已被删除时保持空串，与现有 API 层行为一致
+            if d.get("nickname") is None:
+                d["nickname"] = ""
+            if d.get("head_img") is None:
+                d["head_img"] = ""
+            # 布尔化：SQLite 返回 0/1
+            d["is_favorite"] = True
+            d["is_watchlist"] = bool(d.get("is_watchlist", 0))
+            items.append(d)
+        return {"items": items, "total": total}
+    finally:
+        conn.close()
+
+
+def list_watchlist_paged(page: int, page_size: int) -> Dict:
+    """分页列出已加入待看的文章，按最近一次标记时间倒序（``aw.created_at DESC``）。
+
+    语义与 :func:`list_favorites_paged` 对称：
+    以 ``article_watchlist`` 为主，``LEFT JOIN article_favorites``
+    取 ``is_favorite`` 的实际值。每个 item 显式携带 ``is_watchlist=True``。
+    """
+    conn = _get_conn()
+    try:
+        total_row = conn.execute(
+            "SELECT COUNT(*) AS cnt "
+            "FROM article_watchlist aw "
+            "JOIN articles a ON a.id = aw.article_id"
+        ).fetchone()
+        total = total_row["cnt"] if total_row else 0
+        offset = (page - 1) * page_size
+        rows = conn.execute(
+            "SELECT a.*, "
+            "       s.nickname AS nickname, "
+            "       s.head_img AS head_img, "
+            "       (af.article_id IS NOT NULL) AS is_favorite, "
+            "       1 AS is_watchlist "
+            "FROM article_watchlist aw "
+            "JOIN articles a ON a.id = aw.article_id "
+            "LEFT JOIN subscriptions s ON s.fakeid = a.fakeid "
+            "LEFT JOIN article_favorites af ON af.article_id = aw.article_id "
+            "ORDER BY aw.created_at DESC "
+            "LIMIT ? OFFSET ?",
+            (page_size, offset),
+        ).fetchall()
+        items = []
+        for r in rows:
+            d = dict(r)
+            if d.get("nickname") is None:
+                d["nickname"] = ""
+            if d.get("head_img") is None:
+                d["head_img"] = ""
+            d["is_favorite"] = bool(d.get("is_favorite", 0))
+            d["is_watchlist"] = True
+            items.append(d)
+        return {"items": items, "total": total}
     finally:
         conn.close()

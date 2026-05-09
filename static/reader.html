@@ -354,6 +354,34 @@
             flex-shrink: 0;
         }
 
+        /* Card badges */
+        .card-badges {
+            display: flex;
+            gap: var(--space-xs);
+            margin-top: var(--space-sm);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: var(--font-xs);
+            line-height: 1;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .badge-favorite {
+            background: rgba(250, 140, 22, 0.1);
+            color: var(--warning-color);
+        }
+
+        .badge-watchlist {
+            background: rgba(24, 144, 255, 0.1);
+            color: var(--primary-color);
+        }
+
         /* Empty & loading */
         .empty-state {
             grid-column: 1 / -1;
@@ -634,6 +662,8 @@
         var totalPages = 1;
         var totalArticles = 0;
         var PAGE_SIZE = 10;
+        var currentFilter = '';
+        var initialized = false;
 
         function escHtml(s) {
             var d = document.createElement('div');
@@ -697,7 +727,21 @@
                 html += '<span class="name">' + escHtml(a.nickname || '单篇下载') + '</span>';
                 html += '</div>';
                 html += '<span class="article-time">' + formatTime(a.publish_time) + '</span>';
-                html += '</div></div></a></div>';
+                html += '</div>';
+
+                // Card badges for favorite/watchlist status
+                if (Boolean(a.is_favorite) || Boolean(a.is_watchlist)) {
+                    html += '<div class="card-badges">';
+                    if (Boolean(a.is_favorite)) {
+                        html += '<span class="badge badge-favorite" title="已收藏" aria-label="已收藏">★</span>';
+                    }
+                    if (Boolean(a.is_watchlist)) {
+                        html += '<span class="badge badge-watchlist" title="已加入待看" aria-label="已加入待看">⏱</span>';
+                    }
+                    html += '</div>';
+                }
+
+                html += '</div></a></div>';
             });
 
             grid.innerHTML = html;
@@ -741,27 +785,41 @@
         async function goPage(page) {
             if (page < 1 || page > totalPages || page === currentPage) return;
             currentPage = page;
-            await fetchArticles(currentFakeid, currentPage);
+            if (currentFilter === '__favorite__') {
+                await fetchFavorites(currentPage);
+            } else if (currentFilter === '__watchlist__') {
+                await fetchWatchlist(currentPage);
+            } else {
+                await fetchArticles(currentFakeid, currentPage);
+            }
             applyFilters();
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         async function filterBy(el, fakeid) {
             if (sortMode) return;  // 排序模式下点击不切换筛选
-            if (fakeid === '__standalone__') {
-                standaloneOnly = true;
-                currentFakeid = '';
-            } else {
-                standaloneOnly = false;
-                currentFakeid = fakeid;
-            }
-            currentPage = 1;
 
+            // Clear active from all filter items
             var tags = document.querySelectorAll('.filter-item');
             tags.forEach(function(t) { t.classList.remove('active'); });
             el.classList.add('active');
 
-            await fetchArticles(currentFakeid, 1);
+            currentFilter = fakeid;
+            currentPage = 1;
+
+            if (fakeid === '__favorite__') {
+                await fetchFavorites(1);
+            } else if (fakeid === '__watchlist__') {
+                await fetchWatchlist(1);
+            } else if (fakeid === '__standalone__') {
+                standaloneOnly = true;
+                currentFakeid = '';
+                await fetchArticles(currentFakeid, 1);
+            } else {
+                standaloneOnly = false;
+                currentFakeid = fakeid;
+                await fetchArticles(currentFakeid, 1);
+            }
             applyFilters();
         }
 
@@ -779,6 +837,46 @@
                 if (standaloneOnly) {
                     url += '&standalone_only=true';
                 }
+                var res = await fetch(url);
+                var d = await res.json();
+                if (!d.success) {
+                    grid.innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div class="text">加载失败</div></div>';
+                    return;
+                }
+                allArticles = d.data || [];
+                totalArticles = d.total || 0;
+                totalPages = d.total_pages || 1;
+                currentPage = d.page || 1;
+            } catch (e) {
+                grid.innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div class="text">网络错误: ' + escHtml(e.message) + '</div></div>';
+            }
+        }
+
+        async function fetchFavorites(page) {
+            var grid = document.getElementById('articleGrid');
+            grid.innerHTML = '<div class="loading-state"><span class="loading-spinner"></span>加载中...</div>';
+            try {
+                var url = '/api/rss/marks/favorites?page=' + (page || 1) + '&page_size=' + PAGE_SIZE;
+                var res = await fetch(url);
+                var d = await res.json();
+                if (!d.success) {
+                    grid.innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div class="text">加载失败</div></div>';
+                    return;
+                }
+                allArticles = d.data || [];
+                totalArticles = d.total || 0;
+                totalPages = d.total_pages || 1;
+                currentPage = d.page || 1;
+            } catch (e) {
+                grid.innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div class="text">网络错误: ' + escHtml(e.message) + '</div></div>';
+            }
+        }
+
+        async function fetchWatchlist(page) {
+            var grid = document.getElementById('articleGrid');
+            grid.innerHTML = '<div class="loading-state"><span class="loading-spinner"></span>加载中...</div>';
+            try {
+                var url = '/api/rss/marks/watchlist?page=' + (page || 1) + '&page_size=' + PAGE_SIZE;
                 var res = await fetch(url);
                 var d = await res.json();
                 if (!d.success) {
@@ -820,6 +918,7 @@
             } catch (e) {
                 document.getElementById('articleGrid').innerHTML = '<div class="empty-state"><div class="icon">⚠️</div><div class="text">网络错误: ' + escHtml(e.message) + '</div></div>';
             }
+            initialized = true;
         }
 
         var ORDER_KEY = 'reader.sidebar.order.v1';
@@ -856,11 +955,15 @@
             var list = document.getElementById('filterList');
             var html = '';
             var all = !initFakeid && !standaloneOnly;
-            // 固定项（不可拖）
+            // 固定项（不可拖）：全部 → 收藏 → 待看 → 单篇
             html += '<div class="filter-item' + (all ? ' active' : '') + '" data-fakeid="" onclick="filterBy(this, \'\')">';
             html += '<span class="filter-item-name">全部</span></div>';
+            html += '<div class="filter-item" data-filter="favorite" onclick="filterBy(this, \'__favorite__\')">';
+            html += '<span class="filter-item-name">收藏</span></div>';
+            html += '<div class="filter-item" data-filter="watchlist" onclick="filterBy(this, \'__watchlist__\')">';
+            html += '<span class="filter-item-name">待看</span></div>';
             html += '<div class="filter-item" data-fakeid="__standalone__" onclick="filterBy(this, \'__standalone__\')">';
-            html += '<span class="filter-item-name">单篇下载</span></div>';
+            html += '<span class="filter-item-name">单篇</span></div>';
 
             if (allSources.length > 0) {
                 html += '<div class="filter-divider"></div>';
@@ -1024,6 +1127,18 @@
         }
 
         window.addEventListener('load', loadArticles);
+
+        window.addEventListener('pageshow', async function(event) {
+            if (!initialized) return;
+            if (currentFilter === '__favorite__') {
+                await fetchFavorites(currentPage);
+            } else if (currentFilter === '__watchlist__') {
+                await fetchWatchlist(currentPage);
+            } else {
+                await fetchArticles(currentFakeid, currentPage);
+            }
+            applyFilters();
+        });
     </script>
 </body>
 </html>

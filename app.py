@@ -14,14 +14,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from pathlib import Path
 
 # 导入路由
-from routes import article, article_download, articles, search, admin, login, image, health, stats, rss
+from routes import article, article_download, articles, search, admin, login, image, health, stats, rss, marks
 from utils.rss_store import init_db
 from utils.rss_poller import rss_poller
 
@@ -104,6 +106,42 @@ app.include_router(admin.router, prefix="/api/admin", tags=["管理"])
 app.include_router(login.router, prefix="/api/login", tags=["登录"])
 app.include_router(image.router, prefix="/api", tags=["图片代理"])
 app.include_router(rss.router, prefix="/api", tags=["RSS 订阅"])
+app.include_router(marks.router, prefix="/api", tags=["文章标记"])
+
+# ── 全局异常映射（仅对 marks 路径返回 400，其它路径保持默认行为） ──
+
+
+def _is_marks_path(path: str) -> bool:
+    """判断请求路径是否属于文章标记相关端点。"""
+    if path.startswith("/api/rss/marks/"):
+        return True
+    if path.startswith("/api/rss/article/"):
+        # 匹配 /api/rss/article/{id}/(marks|favorite|watchlist)
+        parts = path.rstrip("/").split("/")
+        return len(parts) >= 6 and parts[5] in ("marks", "favorite", "watchlist")
+    return False
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    if _is_marks_path(request.url.path):
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": "参数不合法", "detail": exc.errors()},
+        )
+    # 其它路径保持 FastAPI 默认 422 行为
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    if _is_marks_path(request.url.path):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"success": False, "error": exc.detail},
+        )
+    # 其它路径保持默认行为
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 # 静态文件
 static_dir = Path(__file__).parent / "static"

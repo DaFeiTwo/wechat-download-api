@@ -134,6 +134,187 @@
             color: var(--text-muted);
         }
 
+        /* ---- Mark actions (收藏 / 待看) ---- */
+        .mark-actions {
+            display: inline-flex;
+            gap: var(--space-sm);
+            margin-left: auto;
+            align-items: center;
+        }
+
+        .btn-sm {
+            padding: 6px 16px;
+            border-radius: var(--radius-base);
+            font-size: var(--font-xs);
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--border-base);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            transition: all var(--duration-fast) var(--ease-in-out);
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            line-height: 1;
+        }
+
+        .btn-sm:hover:not(:disabled) {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .btn-sm:disabled {
+            cursor: default;
+            opacity: 0.75;
+        }
+
+        .mark-btn {
+            min-width: 76px;
+        }
+
+        .mark-btn .mark-icon {
+            font-size: 13px;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .mark-btn .mark-text {
+            font-size: var(--font-xs);
+            line-height: 1;
+        }
+
+        /* Loading state (initial DOM state before GET /marks returns) */
+        .mark-btn[data-state="loading"] {
+            color: var(--text-muted);
+            border-color: var(--border-light);
+        }
+
+        .mark-btn .mark-spinner {
+            width: 12px;
+            height: 12px;
+            border: 2px solid var(--border-light);
+            border-top-color: var(--primary-color);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        /* 收藏 - 未收藏（线框态） */
+        .mark-btn-fav[data-state="off"] {
+            background: var(--bg-primary);
+            border-color: var(--border-base);
+            color: var(--text-secondary);
+        }
+
+        .mark-btn-fav[data-state="off"]:hover:not(:disabled) {
+            border-color: #faad14;
+            color: #faad14;
+        }
+
+        /* 收藏 - 已收藏（填充态） */
+        .mark-btn-fav[data-state="on"] {
+            background: #fff7e6;
+            border-color: #faad14;
+            color: #d48806;
+        }
+
+        .mark-btn-fav[data-state="on"]:hover:not(:disabled) {
+            background: #ffe7ba;
+            border-color: #d48806;
+            color: #ad6800;
+        }
+
+        /* 待看 - 未加入待看（线框态） */
+        .mark-btn-watch[data-state="off"] {
+            background: var(--bg-primary);
+            border-color: var(--border-base);
+            color: var(--text-secondary);
+        }
+
+        .mark-btn-watch[data-state="off"]:hover:not(:disabled) {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        /* 待看 - 已加入待看（填充态） */
+        .mark-btn-watch[data-state="on"] {
+            background: #e6f7ff;
+            border-color: var(--primary-color);
+            color: #096dd9;
+        }
+
+        .mark-btn-watch[data-state="on"]:hover:not(:disabled) {
+            background: #bae7ff;
+            border-color: #096dd9;
+            color: #0050b3;
+        }
+
+        /* ---- Mark toast (右上角提示) ---- */
+        .mark-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            min-width: 240px;
+            max-width: 360px;
+            padding: 12px 14px 12px 16px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-base);
+            border-radius: var(--radius-base);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: var(--font-sm);
+            color: var(--text-primary);
+            opacity: 0;
+            transform: translateY(-12px);
+            transition: opacity 240ms var(--ease-in-out), transform 240ms var(--ease-in-out);
+        }
+
+        .mark-toast[hidden] {
+            display: none !important;
+        }
+
+        .mark-toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .mark-toast-msg {
+            flex: 1;
+            word-break: break-word;
+            line-height: 1.5;
+        }
+
+        .mark-toast-close {
+            flex-shrink: 0;
+            width: 22px;
+            height: 22px;
+            padding: 0;
+            line-height: 1;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 18px;
+            cursor: pointer;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: color var(--duration-fast) var(--ease-in-out),
+                        background var(--duration-fast) var(--ease-in-out);
+        }
+
+        .mark-toast-close:hover {
+            color: var(--text-primary);
+            background: var(--bg-secondary);
+        }
+
         /* Content */
         .article-content {
             padding: 0 var(--space-xl) var(--space-xl);
@@ -405,6 +586,8 @@
             .article-content { padding: 0 var(--space-md) var(--space-lg); }
             .article-title { font-size: var(--font-lg); }
             .article-footer-bar { padding: var(--space-md); }
+            .mark-actions { margin-left: 0; width: 100%; }
+            .mark-toast { top: 12px; right: 12px; left: 12px; max-width: none; }
         }
     </style>
 </head>
@@ -430,6 +613,12 @@
                 <a href="/admin.html">管理面板</a>
             </div>
         </div>
+    </div>
+
+    <!-- 标记操作提示 Toast (最小显示 3 秒，支持手动关闭) -->
+    <div id="markToast" class="mark-toast" role="status" aria-live="polite" hidden>
+        <span class="mark-toast-msg"></span>
+        <button type="button" class="mark-toast-close" aria-label="关闭">×</button>
     </div>
 
     <script>
@@ -478,6 +667,17 @@
             if (a.publish_time) {
                 html += '<span class="time">' + formatTime(a.publish_time) + '</span>';
             }
+            // 收藏 / 待看 操作按钮（初始 disabled + loading，待 initMarks 解除禁用与渲染状态）
+            html += '<div class="mark-actions">';
+            html += '<button id="favBtn" type="button" class="btn-sm mark-btn mark-btn-fav" data-state="loading" disabled aria-label="收藏">';
+            html += '<span class="mark-spinner" aria-hidden="true"></span>';
+            html += '<span class="mark-text">收藏</span>';
+            html += '</button>';
+            html += '<button id="watchBtn" type="button" class="btn-sm mark-btn mark-btn-watch" data-state="loading" disabled aria-label="待看">';
+            html += '<span class="mark-spinner" aria-hidden="true"></span>';
+            html += '<span class="mark-text">待看</span>';
+            html += '</button>';
+            html += '</div>';
             html += '</div></div>';
 
             // Content
@@ -525,7 +725,258 @@
             }
         }
 
-        window.addEventListener('load', loadArticle);
+        async function loadArticleAndInitMarks() {
+            await loadArticle();
+            // 仅当按钮已被渲染（loadArticle 成功）时才调用；parseIdOrAbort 在 id 非法时会 toast 并返回 null
+            if (!document.getElementById('favBtn')) return;
+            var id = parseIdOrAbort();
+            if (id == null) return;
+            await initMarks(id);
+        }
+
+        /* ============================================================
+         * Mark utilities: parseIdOrAbort / fetchWithTimeout / showErrorToast
+         * （任务 5.2：通用工具函数。事件绑定与 initMarks 见本区块下方）
+         * ============================================================ */
+
+        // 统一读取 #markToast 容器；获取不到时所有 toast 调用静默降级。
+        function _getMarkToastEls() {
+            var toast = document.getElementById('markToast');
+            if (!toast) return null;
+            return {
+                toast: toast,
+                msg: toast.querySelector('.mark-toast-msg'),
+                close: toast.querySelector('.mark-toast-close')
+            };
+        }
+
+        var _markToastHideTimer = null;
+        var _markToastCloseBound = false;
+
+        function _hideMarkToast() {
+            var els = _getMarkToastEls();
+            if (!els) return;
+            if (_markToastHideTimer) {
+                clearTimeout(_markToastHideTimer);
+                _markToastHideTimer = null;
+            }
+            els.toast.classList.remove('show');
+            // CSS transition 约 240ms；结束后彻底隐藏（避免 AT 仍读出残留节点）
+            setTimeout(function() {
+                if (!els.toast.classList.contains('show')) {
+                    els.toast.hidden = true;
+                }
+            }, 260);
+        }
+
+        /**
+         * 渲染错误 toast 至 #markToast，至少显示 3 秒。
+         * 覆盖策略：连续调用时覆盖当前内容 + 重置 3s 计时器，避免堆叠。
+         * 关闭按钮点击时立即隐藏。
+         * @param {string} msg 要展示的错误消息
+         */
+        function showErrorToast(msg) {
+            var els = _getMarkToastEls();
+            if (!els) return;
+
+            if (els.msg) els.msg.textContent = msg == null ? '' : String(msg);
+
+            // 关闭按钮只绑定一次（幂等）
+            if (els.close && !_markToastCloseBound) {
+                els.close.addEventListener('click', function() {
+                    _hideMarkToast();
+                });
+                _markToastCloseBound = true;
+            }
+
+            // 覆盖策略：清除旧的自动隐藏定时器
+            if (_markToastHideTimer) {
+                clearTimeout(_markToastHideTimer);
+                _markToastHideTimer = null;
+            }
+
+            els.toast.hidden = false;
+            // 强制 reflow，使重复调用时 .show 的 transition 能重新触发
+            void els.toast.offsetHeight;
+            els.toast.classList.add('show');
+
+            _markToastHideTimer = setTimeout(function() {
+                _hideMarkToast();
+            }, 3000);
+        }
+
+        /**
+         * 从 URLSearchParams 读取 id。缺失 / 空串 / 非纯数字 / 非正整数均视为非法：
+         *   - 保持 #favBtn / #watchBtn 为 disabled（若已渲染）
+         *   - 调用 showErrorToast('文章标识无效')
+         *   - 返回 null
+         * 合法时返回 Number(id)。
+         */
+        function parseIdOrAbort() {
+            var params = new URLSearchParams(window.location.search);
+            var s = params.get('id');
+            var valid = true;
+            if (s === null || s === '') {
+                valid = false;
+            } else if (!/^\d+$/.test(s)) {
+                valid = false;
+            } else {
+                var n = Number(s);
+                if (!(n > 0)) valid = false;
+            }
+
+            if (!valid) {
+                var favBtn = document.getElementById('favBtn');
+                var watchBtn = document.getElementById('watchBtn');
+                if (favBtn) favBtn.disabled = true;
+                if (watchBtn) watchBtn.disabled = true;
+                showErrorToast('文章标识无效');
+                return null;
+            }
+            return Number(s);
+        }
+
+        /**
+         * 带超时的 fetch。基于 AbortController 实现 10s 默认超时。
+         *   - 超时：抛 Error('请求超时')
+         *   - 网络失败：抛 Error('网络错误')
+         *   - HTTP 非 2xx：抛 Error('HTTP ' + status)
+         *   - 成功：resolve(response)
+         * @param {string} url
+         * @param {RequestInit} [options]
+         * @param {number} [timeoutMs=10000]
+         * @returns {Promise<Response>}
+         */
+        async function fetchWithTimeout(url, options, timeoutMs) {
+            if (timeoutMs == null) timeoutMs = 10000;
+            var controller = new AbortController();
+            var timedOut = false;
+            var timer = setTimeout(function() {
+                timedOut = true;
+                controller.abort();
+            }, timeoutMs);
+
+            var mergedOptions = Object.assign({}, options || {}, { signal: controller.signal });
+
+            var response;
+            try {
+                response = await fetch(url, mergedOptions);
+            } catch (err) {
+                clearTimeout(timer);
+                if (timedOut || (err && err.name === 'AbortError')) {
+                    throw new Error('请求超时');
+                }
+                throw new Error('网络错误');
+            }
+            clearTimeout(timer);
+
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status);
+            }
+            return response;
+        }
+
+        /* ============================================================
+         * Mark state rendering & click handlers (任务 5.3)
+         * ============================================================ */
+
+        // 更新按钮视觉状态：state ∈ {'on', 'off', 'loading'}
+        function _renderMarkBtn(btn, kind, state) {
+            if (!btn) return;
+            btn.setAttribute('data-state', state);
+            var iconChar = '';
+            var text = '';
+            if (kind === 'fav') {
+                iconChar = (state === 'on') ? '★' : '☆';
+                text = (state === 'on') ? '已收藏' : '收藏';
+            } else {
+                iconChar = '⏱';
+                text = (state === 'on') ? '已加入待看' : '待看';
+            }
+
+            if (state === 'loading') {
+                btn.innerHTML = '<span class="mark-spinner" aria-hidden="true"></span>'
+                    + '<span class="mark-text">' + text + '</span>';
+            } else {
+                btn.innerHTML = '<span class="mark-icon" aria-hidden="true">' + iconChar + '</span>'
+                    + '<span class="mark-text">' + text + '</span>';
+            }
+        }
+
+        // 当前文章的标记状态（由 initMarks 初始化，点击处理器读写）
+        var _markCurrentId = null;
+        var _markState = { favorite: false, watchlist: false };
+
+        async function _toggleMark(kind) {
+            if (_markCurrentId == null) return;
+            var btn = document.getElementById(kind === 'fav' ? 'favBtn' : 'watchBtn');
+            if (!btn || btn.disabled) return;
+
+            var currentKey = (kind === 'fav') ? 'favorite' : 'watchlist';
+            var current = !!_markState[currentKey];
+            var target = !current;
+            var endpoint = (kind === 'fav') ? 'favorite' : 'watchlist';
+            var method = target ? 'PUT' : 'DELETE';
+
+            // 立即进入 loading 态，避免双击
+            btn.disabled = true;
+            _renderMarkBtn(btn, kind, 'loading');
+
+            try {
+                await fetchWithTimeout(
+                    '/api/rss/article/' + _markCurrentId + '/' + endpoint,
+                    { method: method }
+                );
+                // 成功：翻转状态
+                _markState[currentKey] = target;
+                _renderMarkBtn(btn, kind, target ? 'on' : 'off');
+                btn.disabled = false;
+            } catch (err) {
+                // 失败：还原到请求前的视觉状态
+                _renderMarkBtn(btn, kind, current ? 'on' : 'off');
+                btn.disabled = false;
+                showErrorToast((err && err.message) ? err.message : '操作失败');
+            }
+        }
+
+        function onClickFavorite() { return _toggleMark('fav'); }
+        function onClickWatchlist() { return _toggleMark('watch'); }
+
+        /**
+         * 初始化按钮标记状态：GET /api/rss/article/{id}/marks
+         * - 成功：渲染视觉、解除 disabled、绑定点击
+         * - 失败：保持 disabled，showErrorToast
+         */
+        async function initMarks(id) {
+            var favBtn = document.getElementById('favBtn');
+            var watchBtn = document.getElementById('watchBtn');
+            if (!favBtn || !watchBtn) return;
+
+            _markCurrentId = id;
+
+            try {
+                var res = await fetchWithTimeout('/api/rss/article/' + id + '/marks');
+                var d = await res.json();
+                if (!d || d.success !== true || !d.data) {
+                    throw new Error('加载标记状态失败');
+                }
+                _markState.favorite = !!d.data.favorite;
+                _markState.watchlist = !!d.data.watchlist;
+
+                _renderMarkBtn(favBtn, 'fav', _markState.favorite ? 'on' : 'off');
+                _renderMarkBtn(watchBtn, 'watch', _markState.watchlist ? 'on' : 'off');
+                favBtn.disabled = false;
+                watchBtn.disabled = false;
+
+                favBtn.onclick = onClickFavorite;
+                watchBtn.onclick = onClickWatchlist;
+            } catch (err) {
+                // 保持 disabled + loading
+                showErrorToast((err && err.message) ? err.message : '加载标记状态失败');
+            }
+        }
+
+        window.addEventListener('load', loadArticleAndInitMarks);
 
         /* ---- Image Lightbox ---- */
         (function() {
