@@ -622,12 +622,15 @@ def set_watchlist(article_id: int, value: bool) -> None:
         conn.close()
 
 
-def list_favorites_paged(page: int, page_size: int) -> Dict:
+def list_favorites_paged(page: int, page_size: int,
+                         unread_only: bool = False) -> Dict:
     """分页列出已收藏文章，按最近一次标记时间倒序（``af.created_at DESC``）。
 
     SQL 以 ``article_favorites`` 为主，``JOIN articles`` 获取文章字段，
     ``LEFT JOIN subscriptions`` 补齐 ``nickname`` / ``head_img``，
     ``LEFT JOIN article_watchlist`` 取 ``is_watchlist`` 的实际值。
+
+    ``unread_only=True`` 时仅返回 ``a.read_at = 0`` 的记录，COUNT 同步过滤。
 
     返回 ``{"items": [...], "total": N}``。每个 item 的字段集合与
     ``get_all_articles_paged`` 的 item 一致（``articles`` 表全部列，
@@ -636,10 +639,11 @@ def list_favorites_paged(page: int, page_size: int) -> Dict:
     """
     conn = _get_conn()
     try:
+        where = " WHERE a.read_at = 0" if unread_only else ""
         total_row = conn.execute(
             "SELECT COUNT(*) AS cnt "
             "FROM article_favorites af "
-            "JOIN articles a ON a.id = af.article_id"
+            "JOIN articles a ON a.id = af.article_id" + where
         ).fetchone()
         total = total_row["cnt"] if total_row else 0
         offset = (page - 1) * page_size
@@ -653,7 +657,8 @@ def list_favorites_paged(page: int, page_size: int) -> Dict:
             "JOIN articles a ON a.id = af.article_id "
             "LEFT JOIN subscriptions s ON s.fakeid = a.fakeid "
             "LEFT JOIN article_watchlist aw ON aw.article_id = af.article_id "
-            "ORDER BY af.created_at DESC "
+            + where +
+            " ORDER BY af.created_at DESC "
             "LIMIT ? OFFSET ?",
             (page_size, offset),
         ).fetchall()
@@ -674,19 +679,23 @@ def list_favorites_paged(page: int, page_size: int) -> Dict:
         conn.close()
 
 
-def list_watchlist_paged(page: int, page_size: int) -> Dict:
+def list_watchlist_paged(page: int, page_size: int,
+                         unread_only: bool = False) -> Dict:
     """分页列出已加入待看的文章，按最近一次标记时间倒序（``aw.created_at DESC``）。
 
     语义与 :func:`list_favorites_paged` 对称：
     以 ``article_watchlist`` 为主，``LEFT JOIN article_favorites``
     取 ``is_favorite`` 的实际值。每个 item 显式携带 ``is_watchlist=True``。
+
+    ``unread_only=True`` 时仅返回 ``a.read_at = 0`` 的记录，COUNT 同步过滤。
     """
     conn = _get_conn()
     try:
+        where = " WHERE a.read_at = 0" if unread_only else ""
         total_row = conn.execute(
             "SELECT COUNT(*) AS cnt "
             "FROM article_watchlist aw "
-            "JOIN articles a ON a.id = aw.article_id"
+            "JOIN articles a ON a.id = aw.article_id" + where
         ).fetchone()
         total = total_row["cnt"] if total_row else 0
         offset = (page - 1) * page_size
@@ -700,7 +709,8 @@ def list_watchlist_paged(page: int, page_size: int) -> Dict:
             "JOIN articles a ON a.id = aw.article_id "
             "LEFT JOIN subscriptions s ON s.fakeid = a.fakeid "
             "LEFT JOIN article_favorites af ON af.article_id = aw.article_id "
-            "ORDER BY aw.created_at DESC "
+            + where +
+            " ORDER BY aw.created_at DESC "
             "LIMIT ? OFFSET ?",
             (page_size, offset),
         ).fetchall()

@@ -875,6 +875,9 @@
             grid.innerHTML = '<div class="loading-state"><span class="loading-spinner"></span>加载中...</div>';
             try {
                 var url = '/api/rss/marks/favorites?page=' + (page || 1) + '&page_size=' + PAGE_SIZE;
+                if (showUnreadOnly) {
+                    url += '&unread_only=true';
+                }
                 var res = await fetch(url);
                 var d = await res.json();
                 if (!d.success) {
@@ -895,6 +898,9 @@
             grid.innerHTML = '<div class="loading-state"><span class="loading-spinner"></span>加载中...</div>';
             try {
                 var url = '/api/rss/marks/watchlist?page=' + (page || 1) + '&page_size=' + PAGE_SIZE;
+                if (showUnreadOnly) {
+                    url += '&unread_only=true';
+                }
                 var res = await fetch(url);
                 var d = await res.json();
                 if (!d.success) {
@@ -1099,7 +1105,13 @@
             } else {
                 btn.classList.remove('active');
             }
-            await fetchArticles(currentFakeid, 1);
+            if (currentFilter === '__favorite__') {
+                await fetchFavorites(1);
+            } else if (currentFilter === '__watchlist__') {
+                await fetchWatchlist(1);
+            } else {
+                await fetchArticles(currentFakeid, 1);
+            }
             applyFilters();
         }
 
@@ -1142,8 +1154,14 @@
             }
             try {
                 await fetch(url, { method: 'POST' });
-                // 重新加载当前页
-                await fetchArticles(currentFakeid, currentPage);
+                // 重新加载当前页（按当前筛选分发）
+                if (currentFilter === '__favorite__') {
+                    await fetchFavorites(currentPage);
+                } else if (currentFilter === '__watchlist__') {
+                    await fetchWatchlist(currentPage);
+                } else {
+                    await fetchArticles(currentFakeid, currentPage);
+                }
                 applyFilters();
             } catch (e) {}
         }

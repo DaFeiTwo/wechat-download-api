@@ -238,6 +238,7 @@ async def list_favorites(
     request: Request,
     page: int = Query(1, ge=1, description="页码，从 1 开始"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量 (1-100)"),
+    unread_only: bool = Query(False, description="仅返回未读"),
 ):
     """
     分页列出所有已收藏文章，按最近一次标记时间倒序排列。
@@ -247,7 +248,7 @@ async def list_favorites(
     - 200: `{success, data, total, page, page_size, total_pages}`
     - 400: 参数不合法（由全局 validation handler 映射）
     """
-    result = rss_store.list_favorites_paged(page, page_size)
+    result = rss_store.list_favorites_paged(page, page_size, unread_only=unread_only)
     items = result["items"]
     total = result["total"]
     total_pages = math.ceil(total / page_size) if total > 0 else 0
@@ -274,6 +275,7 @@ async def list_watchlist(
     request: Request,
     page: int = Query(1, ge=1, description="页码，从 1 开始"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量 (1-100)"),
+    unread_only: bool = Query(False, description="仅返回未读"),
 ):
     """
     分页列出所有已加入待看的文章，按最近一次标记时间倒序排列。
@@ -283,7 +285,7 @@ async def list_watchlist(
     - 200: `{success, data, total, page, page_size, total_pages}`
     - 400: 参数不合法（由全局 validation handler 映射）
     """
-    result = rss_store.list_watchlist_paged(page, page_size)
+    result = rss_store.list_watchlist_paged(page, page_size, unread_only=unread_only)
     items = result["items"]
     total = result["total"]
     total_pages = math.ceil(total / page_size) if total > 0 else 0
