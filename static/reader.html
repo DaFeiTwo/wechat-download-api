@@ -213,6 +213,24 @@
             margin: var(--space-sm) var(--space-sm);
         }
 
+        /* 固定筛选项 2×2 网格：全部 / 单篇 / 收藏 / 待看 */
+        .filter-fixed-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+
+        .filter-fixed-grid .filter-item {
+            padding: 6px 10px;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .filter-fixed-grid .filter-item-name {
+            flex: 0 0 auto;
+        }
+
         /* 拖拽手柄：只在"排序中"显示 */
         .drag-handle {
             color: var(--border-base);
@@ -955,15 +973,19 @@
             var list = document.getElementById('filterList');
             var html = '';
             var all = !initFakeid && !standaloneOnly;
-            // 固定项（不可拖）：全部 → 收藏 → 待看 → 单篇
+            // 固定项（不可拖）：2×2 网格布局
+            //   行 1：全部 | 单篇
+            //   行 2：收藏 | 待看
+            html += '<div class="filter-fixed-grid">';
             html += '<div class="filter-item' + (all ? ' active' : '') + '" data-fakeid="" onclick="filterBy(this, \'\')">';
             html += '<span class="filter-item-name">全部</span></div>';
+            html += '<div class="filter-item" data-fakeid="__standalone__" onclick="filterBy(this, \'__standalone__\')">';
+            html += '<span class="filter-item-name">单篇</span></div>';
             html += '<div class="filter-item" data-filter="favorite" onclick="filterBy(this, \'__favorite__\')">';
             html += '<span class="filter-item-name">收藏</span></div>';
             html += '<div class="filter-item" data-filter="watchlist" onclick="filterBy(this, \'__watchlist__\')">';
             html += '<span class="filter-item-name">待看</span></div>';
-            html += '<div class="filter-item" data-fakeid="__standalone__" onclick="filterBy(this, \'__standalone__\')">';
-            html += '<span class="filter-item-name">单篇</span></div>';
+            html += '</div>';
 
             if (allSources.length > 0) {
                 html += '<div class="filter-divider"></div>';
